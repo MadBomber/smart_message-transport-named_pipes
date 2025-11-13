@@ -5,7 +5,7 @@ require "fileutils"
 require "tmpdir"
 require "securerandom"
 
-class SmartMessage::Transport::TestNamedPipesErrors < Minitest::Test
+class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
   def setup
     @test_dir = Dir.mktmpdir("named_pipes_errors")
     @options = {
