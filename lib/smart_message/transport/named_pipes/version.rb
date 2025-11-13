@@ -2,7 +2,7 @@
 
 module SmartMessage
   module Transport
-    module NamedPipes
+    class NamedPipes
       VERSION = "0.0.1"
     end
   end
