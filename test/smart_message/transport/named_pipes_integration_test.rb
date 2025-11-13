@@ -4,7 +4,7 @@ require "test_helper"
 require "fileutils"
 require "tmpdir"
 
-class SmartMessage::Transport::TestNamedPipesIntegration < Minitest::Test
+class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
   def setup
     @test_dir = Dir.mktmpdir("named_pipes_integration")
     @options = {
