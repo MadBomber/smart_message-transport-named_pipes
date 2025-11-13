@@ -1,20 +1,18 @@
 # frozen_string_literal: true
 
-require_relative "lib/smart_message/transport/named_pipes/version"
-
 Gem::Specification.new do |spec|
   spec.name = "smart_message-transport-named_pipes"
-  spec.version = SmartMessage::Transport::NamedPipes::VERSION
+  spec.version = "0.0.1"
   spec.authors = ["Dewayne VanHoozer"]
   spec.email = ["dewayne@vanhoozer.me"]
 
-  spec.summary = "TODO: Write a short summary, because RubyGems requires one."
-  spec.description = "TODO: Write a longer description or delete this line."
+  spec.summary = "Named pipes transport layer for SmartMessage messaging system"
+  spec.description = "Provides Unix named pipes (FIFO) based transport for the SmartMessage pub/sub messaging system, enabling fast IPC communication between processes on the same machine."
   spec.homepage = "https://github.com/MadBomber/smart_message-transport-named_pipes"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.2.0"
 
-  spec.metadata["allowed_push_host"] = "TODO: Set to your gem server 'https://example.com'"
+  spec.metadata["allowed_push_host"] = "https://rubygems.org"
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = "https://github.com/MadBomber/smart_message-transport-named_pipes"
     spec.metadata["changelog_uri"] = "https://github.com/MadBomber/smart_message-transport-named_pipes/blob/main/CHANGELOG.md"
@@ -32,8 +30,14 @@ Gem::Specification.new do |spec|
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
-  # Uncomment to register a new dependency of your gem
-  # spec.add_dependency "example-gem", "~> 1.0"
+  # Runtime dependencies
+  spec.add_dependency "smart_message", ">= 0.1.0"
+
+  # Development dependencies
+  spec.add_development_dependency "bundler", ">= 2.0"
+  spec.add_development_dependency "rake", "~> 13.0"
+  spec.add_development_dependency "minitest", "~> 5.16"
+  spec.add_development_dependency "rubocop", "~> 1.21"
 
   # For more information and examples about making a new gem, check out our
   # guide at: https://bundler.io/guides/creating_gem.html
