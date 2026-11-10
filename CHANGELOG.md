@@ -1,5 +1,8 @@
 ## [Unreleased]
 
+### Added
+- GitHub Actions CI running the test suite directly on Ruby 3.2–3.4
+
 ### Fixed
 - Corrected README channel-derivation example and stale `Running Tests` file paths
 
