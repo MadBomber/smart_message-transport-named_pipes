@@ -147,7 +147,7 @@ transport.disconnect
 
 2. **Channel Derivation**: Message class names are converted to channel names:
    - `OrderCreated` → `ordercreated`
-   - `MyApp::Events::UserSignedUp` → `myapp_events_signedup`
+   - `MyApp::Events::UserSignedUp` → `myapp_events_usersignedup`
 
 3. **Publishing**: Opens the named pipe for writing and sends serialized message data
 
@@ -318,9 +318,9 @@ After checking out the repo, run `bundle install` to install dependencies.
 
 ```bash
 # Run all tests
-ruby -Ilib:test test/smart_message/transport/test_named_pipes.rb
-ruby -Ilib:test test/smart_message/transport/test_named_pipes_integration.rb
-ruby -Ilib:test test/smart_message/transport/test_named_pipes_errors.rb
+ruby -Ilib:test test/smart_message/transport/named_pipes_test.rb
+ruby -Ilib:test test/smart_message/transport/named_pipes_integration_test.rb
+ruby -Ilib:test test/smart_message/transport/named_pipes_errors_test.rb
 
 # Or using rake (if available)
 rake test

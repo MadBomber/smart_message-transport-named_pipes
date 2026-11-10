@@ -1,5 +1,8 @@
 ## [Unreleased]
 
+### Fixed
+- Corrected README channel-derivation example and stale `Running Tests` file paths
+
 ## [0.0.1] - 2025-11-13
 
 ### Added
