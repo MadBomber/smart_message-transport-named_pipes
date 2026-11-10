@@ -2,6 +2,8 @@
 
 ### Added
 - GitHub Actions CI running the test suite directly on Ruby 3.2–3.4
+### Changed
+- Single-source the VERSION constant via version.rb
 
 ### Fixed
 - Corrected README channel-derivation example and stale `Running Tests` file paths
