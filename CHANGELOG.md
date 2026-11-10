@@ -2,6 +2,8 @@
 
 ### Added
 - GitHub Actions CI running the test suite directly on Ruby 3.2–3.4
+### Changed
+- Stop packaging the test-only transport/base.rb stub in the gem
 
 ### Fixed
 - Corrected README channel-derivation example and stale `Running Tests` file paths

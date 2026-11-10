@@ -22,7 +22,11 @@ Gem::Specification.new do |spec|
   gemspec = File.basename(__FILE__)
   spec.files = IO.popen(%w[git ls-files -z], chdir: __dir__, err: IO::NULL) do |ls|
     ls.readlines("\x0", chomp: true).reject do |f|
+      # lib/smart_message/transport/base.rb is a test-only stub for the real
+      # smart_message gem; it must stay in the repo for tests but must not be
+      # packaged, or it could shadow the canonical smart_message base.
       (f == gemspec) ||
+        (f == "lib/smart_message/transport/base.rb") ||
         f.start_with?(*%w[bin/ Gemfile .gitignore test/ .rubocop.yml])
     end
   end
