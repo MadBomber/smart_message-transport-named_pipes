@@ -10,7 +10,7 @@ A Unix named pipes (FIFO) transport layer for the SmartMessage messaging system.
 - **Configurable**: Flexible configuration options for permissions, timeouts, and paths
 - **Namespace Support**: Isolate different applications using namespace configuration
 - **Comprehensive Error Handling**: Detailed logging and error reporting
-- **Zero External Dependencies**: Uses only Ruby standard library
+- **Minimal Dependencies**: Only the `smart_message` framework it extends; the transport itself uses just the Ruby standard library
 
 ## Installation
 
@@ -296,7 +296,7 @@ transport.subscribe(MyMessage, method(:handler))
 | Network | No | Yes | Yes | Yes |
 | Persistence | No | No | Optional | Yes |
 | Setup Complexity | Minimal | Low | Medium | High |
-| External Dependencies | None | None | Redis | RabbitMQ |
+| External Dependencies | smart_message | None | Redis | RabbitMQ |
 
 **Use Named Pipes when**:
 - All processes run on the same machine
