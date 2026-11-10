@@ -113,15 +113,6 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     assert_equal expected, pipe_name
   end
 
-  def test_publisher_pipe_name_format
-    transport = create_mock_transport
-    transport.configure
-
-    pipe_name = transport.send(:publisher_pipe_name, "test_channel")
-    expected = File.join(@test_dir, "test", "test_channel.out.pipe")
-    assert_equal expected, pipe_name
-  end
-
   def test_create_subscriber_pipe
     transport = create_mock_transport
     transport.configure

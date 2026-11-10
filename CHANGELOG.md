@@ -2,6 +2,8 @@
 
 ### Added
 - GitHub Actions CI running the test suite directly on Ruby 3.2–3.4
+### Removed
+- Removed the unused private `publisher_pipe_name` helper (dead code)
 
 ### Fixed
 - Corrected README channel-derivation example and stale `Running Tests` file paths

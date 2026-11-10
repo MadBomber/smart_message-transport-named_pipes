@@ -202,10 +202,6 @@ module SmartMessage
         File.join(@pipe_path, "#{channel_name}.in.pipe")
       end
 
-      def publisher_pipe_name(channel_name)
-        File.join(@pipe_path, "#{channel_name}.out.pipe")
-      end
-
       def create_subscriber_pipe(channel_name)
         pipe_name = subscriber_pipe_name(channel_name)
         return if File.exist?(pipe_name)
