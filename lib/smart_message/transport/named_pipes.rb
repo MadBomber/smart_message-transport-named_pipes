@@ -27,7 +27,7 @@ module SmartMessage
     #
     # @see https://github.com/MadBomber/smart_message-transport-named_pipes
     class NamedPipes < Base
-      VERSION = "0.0.1"
+      require_relative "named_pipes/version"
 
       # Custom error class for NamedPipes transport errors
       class Error < StandardError; end

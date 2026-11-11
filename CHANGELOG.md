@@ -3,6 +3,7 @@
 ### Added
 - GitHub Actions CI running the test suite directly on Ruby 3.2–3.4
 ### Changed
+- Single-source the VERSION constant via version.rb
 - Stop packaging the test-only transport/base.rb stub in the gem
 
 ### Fixed
