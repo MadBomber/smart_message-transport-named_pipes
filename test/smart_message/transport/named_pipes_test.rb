@@ -215,6 +215,16 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     @transport&.disconnect
   end
 
+  def test_unsubscribe_bang_removes_pipe_and_reader
+    @transport = subscribed_probe_transport
+    @transport.unsubscribe!(ProbeMessage)
+
+    refute File.exist?(probe_pipe_name), "pipe left behind after unsubscribe!"
+    refute probe_reader?, "reader left running after unsubscribe!"
+  ensure
+    @transport&.disconnect
+  end
+
   def test_subscribers_predicate_treats_missing_or_empty_as_none
     transport = create_mock_transport
     dispatcher = SmartMessage::Transport::Base::Dispatcher.new
