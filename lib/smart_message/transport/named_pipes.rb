@@ -152,11 +152,18 @@ module SmartMessage
       # @return [void]
       def unsubscribe(message_class, process_method)
         super(message_class, process_method)
-        return if subscribers?(message_class)
+        release_channel(message_class) unless subscribers?(message_class)
+      end
 
-        channel_name = derive_channel_name(message_class)
-        stop_pipe_reader(channel_name)
-        remove_subscriber_pipe(channel_name)
+      # Unsubscribe every handler for a message class.
+      #
+      # Stops the reader thread and removes the subscriber pipe.
+      #
+      # @param message_class [Class] the message class to unsubscribe from
+      # @return [void]
+      def unsubscribe!(message_class)
+        super(message_class)
+        release_channel(message_class)
       end
 
       # Check if the transport is currently connected.
@@ -200,6 +207,12 @@ module SmartMessage
       def subscribers?(message_class)
         handlers = @dispatcher.subscribers.fetch(String(message_class), nil)
         !(handlers.nil? || handlers.empty?)
+      end
+
+      def release_channel(message_class)
+        channel_name = derive_channel_name(message_class)
+        stop_pipe_reader(channel_name)
+        remove_subscriber_pipe(channel_name)
       end
 
       def derive_channel_name(message_class)
