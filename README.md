@@ -349,11 +349,12 @@ The gem is available as open source under the terms of the [MIT License](https:/
 
 ## Related Projects
 
-- [smart_message](https://github.com/MadBomber/smart_message) - Core messaging framework
-- Other SmartMessage transports:
-  - `smart_message-transport-tcp` - TCP/IP transport
-  - `smart_message-transport-redis` - Redis pub/sub transport
-  - `smart_message-transport-http` - HTTP/webhook transport
+- [smart_message](https://github.com/MadBomber/smart_message) - Core messaging framework. As of 0.0.17 it ships `:stdout`, `:memory`, and `:redis` transports built in.
+- Other SmartMessage transports (GitHub repositories, not yet published on RubyGems):
+  - [smart_message-transport-lanet](https://github.com/MadBomber/smart_message-transport-lanet) - LAN peer-to-peer transport using Lanet
+  - [smart_message-transport-email](https://github.com/MadBomber/smart_message-transport-email) - Email (SMTP/IMAP) transport
+  - [smart_message-transport-rabbitmq](https://github.com/MadBomber/smart_message-transport-rabbitmq) - RabbitMQ transport
+  - [smart_message-transport-nats](https://github.com/MadBomber/smart_message-transport-nats) - NATS transport
 
 ## Support
 
