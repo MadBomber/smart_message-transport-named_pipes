@@ -136,8 +136,9 @@ module SmartMessage
         channel_name = derive_channel_name(message_class)
         create_subscriber_pipe(channel_name)
 
-        # Thread-safe check to avoid starting duplicate readers
-        needs_reader = @mutex.synchronize { !@pipe_readers.key?(channel_name) }
+        # Thread-safe check to avoid starting duplicate readers; a reader that
+        # exited during a disconnect is replaced.
+        needs_reader = @mutex.synchronize { !@pipe_readers[channel_name]&.alive? }
         start_pipe_reader(channel_name, message_class) if needs_reader
       end
 

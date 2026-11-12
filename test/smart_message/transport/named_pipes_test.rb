@@ -106,6 +106,20 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     transport&.disconnect
   end
 
+  def test_subscribe_after_reconnect_replaces_dead_reader
+    transport = SmartMessage::Transport::NamedPipes.new(**@options, cleanup: false)
+    transport.connect
+    dead_reader = Thread.new {}.tap(&:join)
+    transport.instance_variable_get(:@pipe_readers)["reconnectmessage"] = dead_reader
+
+    transport.subscribe("ReconnectMessage", ->(*) {})
+
+    assert transport.instance_variable_get(:@pipe_readers)["reconnectmessage"].alive?
+  ensure
+    transport&.disconnect
+    transport&.instance_variable_get(:@pipe_readers)&.each_value(&:kill)
+  end
+
   def test_derive_channel_name
     transport = create_mock_transport
 
