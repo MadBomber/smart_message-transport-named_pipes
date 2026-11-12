@@ -191,7 +191,58 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     assert File.pipe?(pipe_name), "cleanup: false must leave the pipe in place"
   end
 
+  ProbeMessage = Class.new
+
+  def test_unsubscribe_keeps_pipe_while_other_handlers_remain
+    @transport = subscribed_probe_transport
+    @transport.unsubscribe(ProbeMessage, "Probe.first")
+
+    assert File.exist?(probe_pipe_name), "pipe removed while a handler is still subscribed"
+    assert probe_reader?, "reader stopped while a handler is still subscribed"
+  ensure
+    @transport&.disconnect
+  end
+
+  def test_unsubscribe_removes_pipe_after_last_handler
+    @transport = subscribed_probe_transport
+    @transport.unsubscribe(ProbeMessage, "Probe.first")
+    @transport.unsubscribe(ProbeMessage, "Probe.second")
+
+    refute File.exist?(probe_pipe_name), "pipe left behind after the last handler unsubscribed"
+    refute probe_reader?, "reader left running after the last handler unsubscribed"
+    refute @transport.dispatcher.subscribers.key?(ProbeMessage), "lookup added a Class-keyed entry"
+  ensure
+    @transport&.disconnect
+  end
+
+  def test_subscribers_predicate_treats_missing_or_empty_as_none
+    transport = create_mock_transport
+    dispatcher = SmartMessage::Transport::Base::Dispatcher.new
+    transport.instance_variable_set(:@dispatcher, dispatcher)
+
+    refute transport.send(:subscribers?, ProbeMessage)
+    refute dispatcher.subscribers.key?(ProbeMessage.to_s), "lookup added an entry"
+
+    dispatcher.add(ProbeMessage, "Probe.first")
+    assert transport.send(:subscribers?, ProbeMessage)
+
+    dispatcher.drop(ProbeMessage, "Probe.first")
+    refute transport.send(:subscribers?, ProbeMessage)
+  end
+
   private
+
+  def subscribed_probe_transport
+    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport.connect
+    transport.subscribe(ProbeMessage, "Probe.first")
+    transport.subscribe(ProbeMessage, "Probe.second")
+    transport
+  end
+
+  def probe_channel = @transport.send(:derive_channel_name, ProbeMessage)
+  def probe_pipe_name = @transport.send(:subscriber_pipe_name, probe_channel)
+  def probe_reader? = @transport.instance_variable_get(:@pipe_readers).key?(probe_channel)
 
   def create_mock_transport(options = nil)
     options ||= @options

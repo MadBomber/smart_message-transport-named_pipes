@@ -21,11 +21,11 @@ module SmartMessage
       end
 
       def subscribe(message_class, process_method, filter_options = {})
-        # To be implemented by transport
+        @dispatcher.add(message_class, process_method, filter_options)
       end
 
       def unsubscribe(message_class, process_method)
-        # To be implemented by transport
+        @dispatcher.drop(message_class, process_method)
       end
 
       def receive(message_class_name, serialized_data)
@@ -48,11 +48,21 @@ module SmartMessage
         # To be implemented by transport
       end
 
+      # Keys subscribers by String(message_class), as smart_message's Dispatcher does.
       class Dispatcher
         attr_reader :subscribers
 
         def initialize
           @subscribers = Hash.new { |h, k| h[k] = [] }
+        end
+
+        def add(message_class, process_method, _filter_options = {})
+          handlers = @subscribers[String(message_class)]
+          handlers << process_method unless handlers.include?(process_method)
+        end
+
+        def drop(message_class, process_method)
+          @subscribers[String(message_class)].delete(process_method)
         end
       end
 

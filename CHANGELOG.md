@@ -12,6 +12,7 @@
 
 ### Fixed
 - Corrected README channel-derivation example and stale `Running Tests` file paths
+- `unsubscribe` no longer removes the pipe and reader while other handlers for the class remain subscribed (#13)
 
 ## [0.0.1] - 2025-11-13
 

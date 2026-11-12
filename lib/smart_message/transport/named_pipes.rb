@@ -151,13 +151,11 @@ module SmartMessage
       # @return [void]
       def unsubscribe(message_class, process_method)
         super(message_class, process_method)
-        
+        return if subscribers?(message_class)
+
         channel_name = derive_channel_name(message_class)
-        # Only remove pipe if no more subscribers for this message class
-        if @dispatcher.subscribers[message_class].empty?
-          stop_pipe_reader(channel_name)
-          remove_subscriber_pipe(channel_name)
-        end
+        stop_pipe_reader(channel_name)
+        remove_subscriber_pipe(channel_name)
       end
 
       # Check if the transport is currently connected.
@@ -193,6 +191,13 @@ module SmartMessage
       end
 
       private
+
+      # The dispatcher keys subscribers by String(message_class). Use fetch so the
+      # lookup doesn't trigger the Hash default block and add an empty entry.
+      def subscribers?(message_class)
+        handlers = @dispatcher.subscribers.fetch(String(message_class), nil)
+        !(handlers.nil? || handlers.empty?)
+      end
 
       def derive_channel_name(message_class)
         message_class.to_s.gsub('::', '_').downcase
