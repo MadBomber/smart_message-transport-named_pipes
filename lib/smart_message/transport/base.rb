@@ -57,8 +57,7 @@ module SmartMessage
         end
 
         def add(message_class, process_method, _filter_options = {})
-          handlers = @subscribers[String(message_class)]
-          handlers << process_method unless handlers.include?(process_method)
+          @subscribers[String(message_class)] << process_method
         end
 
         def drop(message_class, process_method)
