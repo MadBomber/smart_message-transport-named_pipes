@@ -188,10 +188,7 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
 
     transport.send(:cleanup_pipes)
 
-    # Pipe should still exist because cleanup is false
-    # Note: This test might need adjustment based on actual behavior
-    # For now, we just verify the method doesn't crash
-    assert true
+    assert File.pipe?(pipe_name), "cleanup: false must leave the pipe in place"
   end
 
   private

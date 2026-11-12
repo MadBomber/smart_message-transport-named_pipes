@@ -86,7 +86,6 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
     transport.configure
 
     channel_name = "corrupt_data"
-    pipe_name = transport.send(:subscriber_pipe_name, channel_name)
 
     # Create pipe and start reader
     transport.send(:create_subscriber_pipe, channel_name)
@@ -273,5 +272,6 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
     # Attempting operations after disconnect
     # Should handle gracefully (connected? returns false)
     refute transport.connected?
+    refute File.exist?(pipe_name), "disconnect must remove the subscriber pipe"
   end
 end
