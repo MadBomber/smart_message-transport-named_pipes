@@ -42,6 +42,30 @@ def create_transport
   )
 end
 
+# Message handlers, one per worker process
+def handle_order(message)
+  puts "[ORDER] 📦 New order received:"
+  puts "        ID: #{message.order_id}"
+  puts "        Customer: #{message.customer_name}"
+  puts "        Total: $#{message.total}"
+end
+
+def handle_payment(message)
+  puts "[PAYMENT] 💳 Payment processed:"
+  puts "          Payment ID: #{message.payment_id}"
+  puts "          Order ID: #{message.order_id}"
+  puts "          Amount: $#{message.amount}"
+  puts "          Status: #{message.status}"
+end
+
+def handle_shipment(message)
+  puts "[SHIPMENT] 🚚 Shipment dispatched:"
+  puts "           Shipment ID: #{message.shipment_id}"
+  puts "           Order ID: #{message.order_id}"
+  puts "           Carrier: #{message.carrier}"
+  puts "           Tracking: #{message.tracking_number}"
+end
+
 # Fork worker processes for each message type
 def start_order_processor
   fork do
@@ -49,13 +73,6 @@ def start_order_processor
 
     transport = create_transport
     transport.connect
-
-    def handle_order(message)
-      puts "[ORDER] 📦 New order received:"
-      puts "        ID: #{message.order_id}"
-      puts "        Customer: #{message.customer_name}"
-      puts "        Total: $#{message.total}"
-    end
 
     transport.subscribe(OrderCreated, method(:handle_order))
 
@@ -71,14 +88,6 @@ def start_payment_processor
     transport = create_transport
     transport.connect
 
-    def handle_payment(message)
-      puts "[PAYMENT] 💳 Payment processed:"
-      puts "          Payment ID: #{message.payment_id}"
-      puts "          Order ID: #{message.order_id}"
-      puts "          Amount: $#{message.amount}"
-      puts "          Status: #{message.status}"
-    end
-
     transport.subscribe(PaymentProcessed, method(:handle_payment))
 
     puts "[PAYMENT] Processor ready..."
@@ -92,14 +101,6 @@ def start_shipment_processor
 
     transport = create_transport
     transport.connect
-
-    def handle_shipment(message)
-      puts "[SHIPMENT] 🚚 Shipment dispatched:"
-      puts "           Shipment ID: #{message.shipment_id}"
-      puts "           Order ID: #{message.order_id}"
-      puts "           Carrier: #{message.carrier}"
-      puts "           Tracking: #{message.tracking_number}"
-    end
 
     transport.subscribe(ShipmentDispatched, method(:handle_shipment))
 
