@@ -11,6 +11,7 @@
 - Stop packaging the test-only transport/base.rb stub in the gem
 
 ### Fixed
+- `connect` after `disconnect` restores the transport instead of leaving it shut down (#17)
 - Corrected README channel-derivation example and stale `Running Tests` file paths
 
 ## [0.0.1] - 2025-11-13

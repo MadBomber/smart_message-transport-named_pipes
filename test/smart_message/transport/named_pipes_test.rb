@@ -92,6 +92,20 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     refute transport.connected?
   end
 
+  def test_connect_after_disconnect_restores_transport
+    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport.connect
+    transport.disconnect
+    transport.connect
+
+    assert transport.connected?
+
+    transport.subscribe("ReconnectMessage", ->(*) {})
+    assert File.pipe?(transport.send(:subscriber_pipe_name, "reconnectmessage"))
+  ensure
+    transport&.disconnect
+  end
+
   def test_derive_channel_name
     transport = create_mock_transport
 
