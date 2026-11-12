@@ -83,7 +83,7 @@ module SmartMessage
 
       # Configure the transport by creating the pipe directory.
       #
-      # This method is called automatically by {#connect} if not already configured.
+      # This method is called automatically by {#connect}.
       #
       # @return [void]
       def configure
@@ -167,11 +167,13 @@ module SmartMessage
 
       # Connect the transport.
       #
-      # Configures the pipe directory if not already done.
+      # Clears the shutdown flag and (re)creates the pipe directory, so the
+      # transport can be connected again after {#disconnect}.
       #
       # @return [void]
       def connect
-        configure unless @pipe_path
+        @shutdown = false
+        configure
         logger.info { "[NamedPipes] Transport connected" }
       end
 
