@@ -11,6 +11,7 @@
 - Stop packaging the test-only transport/base.rb stub in the gem
 
 ### Fixed
+- Messages are no longer lost under bursty publishing: the reader keeps its FIFO open between writers (#18)
 - A message whose `receive` raises no longer drops the other messages read with it or stalls the channel (#23)
 - `disconnect` with `cleanup: false` now stops reader threads; the option only controls pipe removal (#24)
 - `SMART_MESSAGE_PIPE_BASE` and `SMART_MESSAGE_NAMESPACE` are honoured when set after the gem is required (#28)
