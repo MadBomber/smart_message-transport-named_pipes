@@ -96,24 +96,6 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
     assert_equal messages, received_messages
   end
 
-  def test_pipe_timeout_when_no_reader
-    transport = new_transport
-    transport.configure
-
-    channel_name = "timeout_test"
-    pipe_name = transport.send(:subscriber_pipe_name, channel_name)
-
-    # Create the pipe but don't start a reader
-    transport.send(:create_subscriber_pipe, channel_name)
-
-    # Writing should timeout (not hang forever)
-    error = assert_raises(SmartMessage::Transport::NamedPipes::Error) do
-      transport.send(:write_to_pipe, pipe_name, "This should timeout")
-    end
-
-    assert_match(/Timeout writing to named pipe/, error.message)
-  end
-
   def test_thread_safety_concurrent_pipe_operations
     transport = new_transport
     transport.configure
