@@ -180,6 +180,40 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     assert File.exist?(pipe_name)
   end
 
+  def test_create_subscriber_pipe_refuses_a_regular_file
+    transport = create_mock_transport
+    transport.configure
+
+    pipe_name = transport.send(:subscriber_pipe_name, "test_channel")
+    File.write(pipe_name, "")
+
+    assert_raises(SmartMessage::Transport::NamedPipes::Error) do
+      transport.send(:create_subscriber_pipe, "test_channel")
+    end
+    refute transport.subscriber_pipes.key?("test_channel")
+  end
+
+  def test_write_to_missing_pipe_does_not_create_a_file
+    transport = create_mock_transport
+    transport.configure
+
+    pipe_name = transport.send(:subscriber_pipe_name, "gone_channel")
+    transport.send(:write_to_pipe, pipe_name, "data")
+
+    refute File.exist?(pipe_name), "write_to_pipe must not create a regular file at the pipe path"
+  end
+
+  def test_publish_skips_a_path_that_is_not_a_fifo
+    transport = create_mock_transport
+    transport.configure
+
+    pipe_name = transport.send(:subscriber_pipe_name, "plainfile")
+    File.write(pipe_name, "untouched\n")
+
+    assert_nil transport.do_publish("PlainFile", "data")
+    assert_equal "untouched\n", File.read(pipe_name)
+  end
+
   def test_remove_subscriber_pipe
     transport = create_mock_transport
     transport.configure

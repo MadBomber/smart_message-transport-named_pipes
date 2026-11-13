@@ -19,6 +19,7 @@
 - Corrected README channel-derivation example and stale `Running Tests` file paths
 - `unsubscribe` no longer removes the pipe and reader while other handlers for the class remain subscribed (#13)
 - `unsubscribe!` now removes the subscriber pipe and stops its reader thread (#15)
+- Publishing to a removed pipe no longer leaves a regular file that blocks re-subscribing; a non-FIFO at the pipe path is refused (#40)
 
 ## [0.0.1] - 2025-11-13
 
