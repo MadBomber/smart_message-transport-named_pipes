@@ -3,7 +3,6 @@
 require "test_helper"
 require "fileutils"
 require "tmpdir"
-require "securerandom"
 
 class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
   def setup
@@ -33,8 +32,7 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
 
     nonexistent_pipe = File.join(@test_dir, "nonexistent.pipe")
 
-    # Today write_to_pipe opens with 'w', so a missing pipe becomes a regular
-    # file and nothing raises. That is a known lib bug; this test only checks
+    # A missing pipe is logged and the message dropped; this test only checks
     # that no unexpected error escapes, and stays inside @test_dir.
     begin
       transport.send(:write_to_pipe, nonexistent_pipe, "test data")
@@ -42,14 +40,6 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
     rescue SmartMessage::Transport::NamedPipes::Error => e
       assert_match(/Timeout writing to named pipe/, e.message)
     end
-  end
-
-  def test_create_pipe_in_nonexistent_directory
-    skip "FileUtils.mkdir_p creates parent directories, making this hard to test portably"
-
-    # This would test creating a pipe in a directory where we truly can't write
-    # but FileUtils.mkdir_p is very forgiving and creates parent directories
-    # A real test would require setting up actual permission denied scenarios
   end
 
   def test_timeout_on_write_to_blocked_pipe
@@ -80,28 +70,6 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
     # Publishing to a channel with no subscribers should not raise
     # (message is just dropped with debug log)
     assert_nil transport.do_publish("NonexistentClass", "serialized data")
-  end
-
-  def test_error_handling_with_corrupt_data
-    skip "Requires full SmartMessage framework for deserialization"
-
-    transport = new_transport
-    transport.configure
-
-    channel_name = "corrupt_data"
-
-    # Create pipe and start reader
-    transport.send(:create_subscriber_pipe, channel_name)
-
-    # Test with various corrupt/malformed data
-    # The receive method should handle this gracefully
-  end
-
-  def test_handle_permission_denied
-    skip "Requires special permission setup"
-
-    # This would test creating a pipe in a directory where we don't have write permissions
-    # Difficult to test in a portable way
   end
 
   def test_cleanup_with_open_file_descriptors
@@ -210,20 +178,28 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
     end
   end
 
-  def test_very_long_channel_name
+  def test_very_long_channel_name_raises
     transport = new_transport
     transport.configure
 
-    # Very long channel name (testing filename limits)
-    long_name = "a" * 200
-    pipe_name = transport.send(:subscriber_pipe_name, long_name)
-
-    # Should create a path (though the OS may reject it during mkfifo)
-    assert pipe_name.length > 200
+    # Longer than the 255-byte file name limit on Linux and macOS
+    assert_raises(SmartMessage::Transport::NamedPipes::Error) do
+      transport.send(:create_subscriber_pipe, "a" * 300)
+    end
   end
 
-  def test_error_in_signal_handler
-    skip "Signal handler testing is complex and platform-specific"
+  def test_create_pipe_in_unwritable_directory_raises
+    skip "root ignores directory permissions" if Process.euid.zero?
+
+    transport = new_transport
+    transport.configure
+    File.chmod(0o500, transport.pipe_path)
+
+    assert_raises(SmartMessage::Transport::NamedPipes::Error) do
+      transport.send(:create_subscriber_pipe, "no_write_access")
+    end
+  ensure
+    File.chmod(0o755, transport.pipe_path) if transport&.pipe_path
   end
 
   def test_shutdown_flag_thread_visibility
@@ -244,20 +220,6 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
     thread.join(1.0)
 
     assert flag_visible, "Shutdown flag should be visible across threads"
-  end
-
-  def test_mkfifo_failure
-    skip "Requires mkfifo to fail in a controlled way"
-
-    # This would test the case where system("mkfifo", ...) fails
-    # Difficult to test without mocking or causing actual system failures
-  end
-
-  def test_reader_thread_exception_handling
-    skip "Requires full SmartMessage framework to test reader threads"
-
-    # This would test that exceptions in reader threads are caught and logged
-    # without crashing the entire transport
   end
 
   def test_write_after_disconnect

@@ -9,6 +9,7 @@
 ### Changed
 - Single-source the VERSION constant via version.rb
 - Stop packaging the test-only transport/base.rb stub in the gem
+- Replaced six skip-only error tests with real tests for pipe-creation failures (#45)
 
 ### Fixed
 - Messages are no longer lost under bursty publishing: the reader keeps its FIFO open between writers (#18)
@@ -20,6 +21,8 @@
 - `unsubscribe` no longer removes the pipe and reader while other handlers for the class remain subscribed (#13)
 - `unsubscribe!` now removes the subscriber pipe and stops its reader thread (#15)
 - Requiring the transport now loads `smart_message` itself, so it works without a prior `require "smart_message"` (#41)
+- Publishing to a removed pipe no longer leaves a regular file that blocks re-subscribing; a non-FIFO at the pipe path is refused (#40)
+- INT/TERM no longer crash with `ThreadError` in the trap handler; cleanup runs from `at_exit` instead (#12)
 
 ## [0.0.1] - 2025-11-13
 
