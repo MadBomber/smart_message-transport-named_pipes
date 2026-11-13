@@ -21,10 +21,13 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
     FileUtils.rm_rf(@test_dir) if File.exist?(@test_dir)
   end
 
-  def test_write_to_pipe_simple_message
-    skip "Integration test requires full SmartMessage framework"
+  # Assigned to @transport so teardown disconnects it.
+  def new_transport
+    @transport = SmartMessage::Transport::NamedPipes.new(**@options)
+  end
 
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+  def test_write_to_pipe_simple_message
+    transport = new_transport
     transport.configure
 
     channel_name = "test_channel"
@@ -57,7 +60,7 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
   def test_pipe_communication_multiple_messages
     skip "Integration test requires full SmartMessage framework"
 
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     channel_name = "multi_message_channel"
@@ -94,7 +97,7 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
   end
 
   def test_pipe_timeout_when_no_reader
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     channel_name = "timeout_test"
@@ -112,7 +115,7 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
   end
 
   def test_thread_safety_concurrent_pipe_operations
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     # Create multiple pipes concurrently
@@ -134,7 +137,7 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
   end
 
   def test_cleanup_removes_all_resources
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     # Create multiple pipes
@@ -160,7 +163,7 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
   end
 
   def test_graceful_shutdown
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     # Set shutdown flag
@@ -171,7 +174,7 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
   end
 
   def test_connect_and_disconnect
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
 
     # Initially not configured (no pipe_path set)
     # Note: connected? checks @shutdown flag and pipe_path existence
@@ -188,7 +191,7 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
   end
 
   def test_channel_name_derivation_edge_cases
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     # Test various class name formats
@@ -207,7 +210,7 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
   end
 
   def test_pipe_permissions
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     channel_name = "permission_test"
