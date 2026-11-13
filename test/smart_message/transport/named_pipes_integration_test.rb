@@ -58,8 +58,6 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
   end
 
   def test_pipe_communication_multiple_messages
-    skip "Integration test requires full SmartMessage framework"
-
     transport = new_transport
     transport.configure
 
@@ -69,10 +67,12 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
     # Create the pipe
     transport.send(:create_subscriber_pipe, channel_name)
 
-    # Start a reader thread that reads multiple messages
+    # Start a reader thread that reads multiple messages. Open read-write, as
+    # the transport's own reader does: write_to_pipe opens and closes the FIFO
+    # per message, so a read-only reader would hit EOF after the first one.
     received_messages = []
     reader_thread = Thread.new do
-      File.open(pipe_name, 'r') do |pipe|
+      File.open(pipe_name, 'r+') do |pipe|
         3.times do
           if data = pipe.gets
             received_messages << data.strip
@@ -94,6 +94,8 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
     reader_thread.join(2.0)
 
     assert_equal messages, received_messages
+  ensure
+    reader_thread&.kill
   end
 
   def test_thread_safety_concurrent_pipe_operations
