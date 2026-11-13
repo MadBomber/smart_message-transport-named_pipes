@@ -38,24 +38,17 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     assert_equal 5.0, config[:timeout]
   end
 
-  def test_default_base_path_from_env
-    # DEFAULT_CONFIG is frozen and evaluated at load time, so we test
-    # that the environment variable support is present in the constant definition
-    config = SmartMessage::Transport::NamedPipes::DEFAULT_CONFIG
+  def test_env_vars_set_after_require_are_used
+    original = ENV.values_at("SMART_MESSAGE_PIPE_BASE", "SMART_MESSAGE_NAMESPACE")
+    ENV["SMART_MESSAGE_PIPE_BASE"] = @test_dir
+    ENV["SMART_MESSAGE_NAMESPACE"] = "from_env"
 
-    # Verify that base_path has a default value
-    assert config[:base_path].is_a?(String)
-    refute config[:base_path].empty?
-  end
+    transport = SmartMessage::Transport::NamedPipes.new
 
-  def test_default_namespace_from_env
-    # DEFAULT_CONFIG is frozen and evaluated at load time, so we test
-    # that the environment variable support is present in the constant definition
-    config = SmartMessage::Transport::NamedPipes::DEFAULT_CONFIG
-
-    # Verify that namespace has a default value
-    assert config[:namespace].is_a?(String)
-    refute config[:namespace].empty?
+    assert_equal @test_dir, transport.options[:base_path]
+    assert_equal "from_env", transport.options[:namespace]
+  ensure
+    ENV["SMART_MESSAGE_PIPE_BASE"], ENV["SMART_MESSAGE_NAMESPACE"] = original
   end
 
   def test_initialization_creates_required_structures
@@ -118,6 +111,20 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
   ensure
     transport&.disconnect
     transport&.instance_variable_get(:@pipe_readers)&.each_value(&:kill)
+  end
+
+  def test_disconnect_without_cleanup_stops_readers_but_keeps_pipes
+    transport = SmartMessage::Transport::NamedPipes.new(**@options, cleanup: false)
+    transport.connect
+    transport.subscribe("KeepMessage", ->(*) {})
+    reader = transport.instance_variable_get(:@pipe_readers)["keepmessage"]
+
+    transport.disconnect
+
+    refute reader.alive?, "reader left running after disconnect"
+    assert File.pipe?(transport.send(:subscriber_pipe_name, "keepmessage"))
+  ensure
+    reader&.kill
   end
 
   def test_derive_channel_name
@@ -239,6 +246,16 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     refute File.exist?(probe_pipe_name), "pipe left behind after the last handler unsubscribed"
     refute probe_reader?, "reader left running after the last handler unsubscribed"
     refute @transport.dispatcher.subscribers.key?(ProbeMessage), "lookup added a Class-keyed entry"
+  ensure
+    @transport&.disconnect
+  end
+
+  def test_unsubscribe_bang_removes_pipe_and_reader
+    @transport = subscribed_probe_transport
+    @transport.unsubscribe!(ProbeMessage)
+
+    refute File.exist?(probe_pipe_name), "pipe left behind after unsubscribe!"
+    refute probe_reader?, "reader left running after unsubscribe!"
   ensure
     @transport&.disconnect
   end

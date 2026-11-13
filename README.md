@@ -37,7 +37,7 @@ gem install smart_message-transport-named_pipes
 - Ruby >= 3.2.0
 - Unix-like operating system (Linux, macOS, BSD)
 - `mkfifo` command available (standard on all Unix systems)
-- `smart_message` gem
+- `smart_message` gem >= 0.1.0 (not yet on RubyGems; see [#6](https://github.com/MadBomber/smart_message-transport-named_pipes/issues/6))
 
 **Note**: Named pipes (FIFOs) are a Unix-specific feature. This transport will not work on Windows.
 
@@ -150,6 +150,8 @@ transport.disconnect
    - `MyApp::Events::UserSignedUp` → `myapp_events_usersignedup`
 
 3. **Publishing**: Opens the named pipe for writing and sends serialized message data
+   - If no subscriber has created the pipe yet, the message is dropped and only a debug-level log line records it, so start subscribers before publishers.
+   - If the pipe exists but nothing is reading it, the write waits up to `timeout` seconds and then raises (see [Pipe Timeout Errors](#pipe-timeout-errors)).
 
 4. **Subscribing**: Creates a background thread that continuously reads from the named pipe
 
@@ -349,7 +351,7 @@ The gem is available as open source under the terms of the [MIT License](https:/
 
 ## Related Projects
 
-- [smart_message](https://github.com/MadBomber/smart_message) - Core messaging framework. As of 0.0.17 it ships `:stdout`, `:memory`, and `:redis` transports built in.
+- [smart_message](https://github.com/MadBomber/smart_message) - Core messaging framework. As of [0.1.0](https://github.com/MadBomber/smart_message/tree/2aa3dbf) it ships `:memory`, `:stdout`, `:file`, and `:redis` transports built in.
 - Other SmartMessage transports (GitHub repositories, not yet published on RubyGems):
   - [smart_message-transport-lanet](https://github.com/MadBomber/smart_message-transport-lanet) - LAN peer-to-peer transport using Lanet
   - [smart_message-transport-email](https://github.com/MadBomber/smart_message-transport-email) - Email (SMTP/IMAP) transport
