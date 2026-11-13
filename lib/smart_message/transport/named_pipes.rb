@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+# Load the whole framework: smart_message 0.1.0 autoloads through Zeitwerk,
+# and Base alone leaves SmartMessage::Dispatcher undefined.
+require 'smart_message'
 require 'smart_message/transport/base'
 require 'fileutils'
 require 'timeout'
