@@ -94,9 +94,15 @@ module SmartMessage
 
       # Return default configuration options.
       #
-      # @return [Hash] default options from DEFAULT_CONFIG
+      # SMART_MESSAGE_PIPE_BASE and SMART_MESSAGE_NAMESPACE are read at call
+      # time, so they take effect even when set after the gem is required.
+      #
+      # @return [Hash] default options from DEFAULT_CONFIG and the environment
       def default_options
-        DEFAULT_CONFIG
+        DEFAULT_CONFIG.merge(
+          base_path: ENV.fetch('SMART_MESSAGE_PIPE_BASE', DEFAULT_CONFIG[:base_path]),
+          namespace: ENV.fetch('SMART_MESSAGE_NAMESPACE', DEFAULT_CONFIG[:namespace])
+        )
       end
 
       # Publish a message to the transport.
