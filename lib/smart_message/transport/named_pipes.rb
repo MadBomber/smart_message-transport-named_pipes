@@ -249,7 +249,12 @@ module SmartMessage
                       data = pipe.gets
                       if data && !data.strip.empty?
                         logger.debug { "[NamedPipes] Received #{data.bytesize} bytes on #{channel_name}" }
-                        receive(message_class.to_s, data.strip)
+                        begin
+                          receive(message_class.to_s, data.strip)
+                        rescue => e
+                          # Skip only this message; keep reading the rest of the buffer
+                          logger.error { "[NamedPipes] Error processing message on #{channel_name}: #{e.class} - #{e.message}" }
+                        end
                       end
                     end
                   end

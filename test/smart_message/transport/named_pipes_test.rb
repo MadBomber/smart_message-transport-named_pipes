@@ -258,6 +258,24 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     refute transport.send(:subscribers?, ProbeMessage)
   end
 
+  def test_failing_receive_skips_only_its_own_message
+    @transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    received = Queue.new
+    @transport.define_singleton_method(:receive) do |_klass, data|
+      received << data
+      raise "bad line" if data == "bad"
+    end
+    @transport.connect
+    @transport.subscribe(ProbeMessage, "Probe.first")
+
+    @transport.send(:write_to_pipe, probe_pipe_name, "bad\ngood1\ngood2")
+
+    got = Array.new(3) { received.pop(timeout: 2) }
+    assert_equal %w[bad good1 good2], got
+  ensure
+    @transport&.disconnect
+  end
+
   private
 
   def subscribed_probe_transport
