@@ -11,6 +11,7 @@
 - Stop packaging the test-only transport/base.rb stub in the gem
 
 ### Fixed
+- A message whose `receive` raises no longer drops the other messages read with it or stalls the channel (#23)
 - `disconnect` with `cleanup: false` now stops reader threads; the option only controls pipe removal (#24)
 - `SMART_MESSAGE_PIPE_BASE` and `SMART_MESSAGE_NAMESPACE` are honoured when set after the gem is required (#28)
 - `connect` after `disconnect` restores the transport instead of leaving it shut down (#17)
