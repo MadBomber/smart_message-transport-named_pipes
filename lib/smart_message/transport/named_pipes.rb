@@ -392,13 +392,16 @@ module SmartMessage
 
       def setup_signal_handlers
         %w[INT TERM].each do |signal|
-          Signal.trap(signal) do
-            @shutdown = true
-            notify_shutdown
-            cleanup_pipes
-            exit(0)
-          end
+          Signal.trap(signal) { handle_shutdown_signal }
         end
+      end
+
+      # Runs in trap context, where Mutex#synchronize raises ThreadError, so
+      # only set the flag and exit. The at_exit hook registered in #initialize
+      # stops the readers and removes the pipes outside trap context.
+      def handle_shutdown_signal
+        @shutdown = true
+        exit(0)
       end
     end
   end
