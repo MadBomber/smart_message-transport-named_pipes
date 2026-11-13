@@ -1,7 +1,7 @@
 ## [Unreleased]
 
 ### Added
-- GitHub Actions CI running the test suite directly on Ruby 3.2–3.4
+- GitHub Actions CI running the test suite directly on Ruby 3.2–3.4 and 4.0
 
 ### Removed
 - Removed the unused private `publisher_pipe_name` helper (dead code)
@@ -9,9 +9,11 @@
 ### Changed
 - Single-source the VERSION constant via version.rb
 - Stop packaging the test-only transport/base.rb stub in the gem
+- Replaced six skip-only error tests with real tests for pipe-creation failures (#45)
 
 ### Fixed
 - `unsubscribe` and `disconnect` stop idle reader threads promptly instead of waiting ~2s per channel and killing them (#14)
+- Messages are no longer lost under bursty publishing: the reader keeps its FIFO open between writers (#18)
 - A message whose `receive` raises no longer drops the other messages read with it or stalls the channel (#23)
 - `disconnect` with `cleanup: false` now stops reader threads; the option only controls pipe removal (#24)
 - `SMART_MESSAGE_PIPE_BASE` and `SMART_MESSAGE_NAMESPACE` are honoured when set after the gem is required (#28)
@@ -19,6 +21,7 @@
 - Corrected README channel-derivation example and stale `Running Tests` file paths
 - `unsubscribe` no longer removes the pipe and reader while other handlers for the class remain subscribed (#13)
 - `unsubscribe!` now removes the subscriber pipe and stops its reader thread (#15)
+- INT/TERM no longer crash with `ThreadError` in the trap handler; cleanup runs from `at_exit` instead (#12)
 
 ## [0.0.1] - 2025-11-13
 

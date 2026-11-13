@@ -118,7 +118,7 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     transport.connect
     %w[FastA FastB FastC].each { |name| transport.subscribe(name, ->(*) {}) }
     readers = transport.instance_variable_get(:@pipe_readers).values
-    sleep 0.2 # let the readers block opening their FIFOs
+    sleep 0.2 # let the readers become idle
 
     started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     transport.disconnect
@@ -126,6 +126,24 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
 
     assert_operator elapsed, :<, 1.0
     assert readers.none?(&:alive?)
+  end
+
+  def test_unsubscribe_stops_idle_reader_promptly
+    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport.connect
+    handler = ->(*) {}
+    transport.subscribe("FastA", handler)
+    reader = transport.instance_variable_get(:@pipe_readers)["fasta"]
+    sleep 0.2
+
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    transport.unsubscribe("FastA", handler)
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+
+    assert_operator elapsed, :<, 1.0
+    refute reader.alive?
+  ensure
+    transport&.disconnect
   end
 
   def test_disconnect_without_cleanup_stops_readers_but_keeps_pipes
@@ -288,6 +306,22 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
 
     dispatcher.drop(ProbeMessage, "Probe.first")
     refute transport.send(:subscribers?, ProbeMessage)
+  end
+
+  def test_burst_of_publishes_loses_no_messages
+    @transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    received = Queue.new
+    @transport.define_singleton_method(:receive) { |_klass, data| received << data }
+    @transport.connect
+    @transport.subscribe(ProbeMessage, "Probe.first")
+
+    count = 2000
+    count.times { |i| @transport.do_publish(ProbeMessage, "msg#{i}") }
+
+    got = Array.new(count) { received.pop(timeout: 2) }
+    assert_equal count, got.compact.uniq.size
+  ensure
+    @transport&.disconnect
   end
 
   def test_failing_receive_skips_only_its_own_message

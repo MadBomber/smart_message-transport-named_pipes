@@ -260,10 +260,13 @@ module SmartMessage
           
           begin
             while !@shutdown && !Thread.current.thread_variable_get(:stop)
-              # Open pipe in non-blocking mode to avoid hanging
               begin
-                File.open(pipe_name, 'r') do |pipe|
-                  while !@shutdown && !Thread.current.thread_variable_get(:stop) && !pipe.eof?
+                # Open read-write so this reader also holds a write end: the
+                # FIFO never reaches EOF between publishers, so a writer can't
+                # hit a closed pipe (EPIPE) or have its data discarded while
+                # the reader would otherwise be closing and reopening.
+                File.open(pipe_name, 'r+') do |pipe|
+                  while !@shutdown && !Thread.current.thread_variable_get(:stop)
                     if IO.select([pipe], nil, nil, 0.1) # 100ms timeout
                       data = pipe.gets
                       if data && !data.strip.empty?
@@ -308,25 +311,8 @@ module SmartMessage
         return unless reader_thread&.alive?
 
         reader_thread.thread_variable_set(:stop, true)
-        pipe_name = subscriber_pipe_name(channel_name)
-        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 2.0
-
-        until reader_thread.join(0.05)
-          break if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
-
-          wake_pipe_reader(pipe_name)
-        end
-
+        reader_thread.join(2.0)
         reader_thread.kill if reader_thread.alive?
-      end
-
-      # A reader blocked in File.open(pipe, 'r') cannot be interrupted, so open
-      # and close the FIFO for writing: the open returns, the reader sees EOF
-      # and checks its stop flag.
-      def wake_pipe_reader(pipe_name)
-        File.open(pipe_name, File::WRONLY | File::NONBLOCK).close
-      rescue SystemCallError
-        # No reader currently has the FIFO open (ENXIO) or it is already gone
       end
 
       def write_to_pipe(pipe_name, data)
@@ -397,13 +383,16 @@ module SmartMessage
 
       def setup_signal_handlers
         %w[INT TERM].each do |signal|
-          Signal.trap(signal) do
-            @shutdown = true
-            notify_shutdown
-            cleanup_pipes
-            exit(0)
-          end
+          Signal.trap(signal) { handle_shutdown_signal }
         end
+      end
+
+      # Runs in trap context, where Mutex#synchronize raises ThreadError, so
+      # only set the flag and exit. The at_exit hook registered in #initialize
+      # stops the readers and removes the pipes outside trap context.
+      def handle_shutdown_signal
+        @shutdown = true
+        exit(0)
       end
     end
   end
