@@ -150,6 +150,8 @@ transport.disconnect
    - `MyApp::Events::UserSignedUp` → `myapp_events_usersignedup`
 
 3. **Publishing**: Opens the named pipe for writing and sends serialized message data
+   - If no subscriber has created the pipe yet, the message is dropped and only a debug-level log line records it, so start subscribers before publishers.
+   - If the pipe exists but nothing is reading it, the write waits up to `timeout` seconds and then raises (see [Pipe Timeout Errors](#pipe-timeout-errors)).
 
 4. **Subscribing**: Creates a background thread that continuously reads from the named pipe
 
