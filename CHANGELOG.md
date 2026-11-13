@@ -1,7 +1,7 @@
 ## [Unreleased]
 
 ### Added
-- GitHub Actions CI running the test suite directly on Ruby 3.2–3.4
+- GitHub Actions CI running the test suite directly on Ruby 3.2–3.4 and 4.0
 
 ### Removed
 - Removed the unused private `publisher_pipe_name` helper (dead code)
