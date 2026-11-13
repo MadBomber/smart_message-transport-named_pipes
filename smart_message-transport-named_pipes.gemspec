@@ -2,7 +2,10 @@
 
 Gem::Specification.new do |spec|
   spec.name = "smart_message-transport-named_pipes"
-  spec.version = "0.0.1"
+  # Read VERSION as text: requiring version.rb would open NamedPipes without
+  # its Base superclass and break the later `class NamedPipes < Base`.
+  version_rb = File.read(File.expand_path("lib/smart_message/transport/named_pipes/version.rb", __dir__))
+  spec.version = version_rb[/VERSION\s*=\s*["']([^"']+)["']/, 1]
   spec.authors = ["Dewayne VanHoozer"]
   spec.email = ["dewayne@vanhoozer.me"]
 
