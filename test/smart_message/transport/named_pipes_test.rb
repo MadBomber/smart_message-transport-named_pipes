@@ -38,24 +38,17 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     assert_equal 5.0, config[:timeout]
   end
 
-  def test_default_base_path_from_env
-    # DEFAULT_CONFIG is frozen and evaluated at load time, so we test
-    # that the environment variable support is present in the constant definition
-    config = SmartMessage::Transport::NamedPipes::DEFAULT_CONFIG
+  def test_env_vars_set_after_require_are_used
+    original = ENV.values_at("SMART_MESSAGE_PIPE_BASE", "SMART_MESSAGE_NAMESPACE")
+    ENV["SMART_MESSAGE_PIPE_BASE"] = @test_dir
+    ENV["SMART_MESSAGE_NAMESPACE"] = "from_env"
 
-    # Verify that base_path has a default value
-    assert config[:base_path].is_a?(String)
-    refute config[:base_path].empty?
-  end
+    transport = SmartMessage::Transport::NamedPipes.new
 
-  def test_default_namespace_from_env
-    # DEFAULT_CONFIG is frozen and evaluated at load time, so we test
-    # that the environment variable support is present in the constant definition
-    config = SmartMessage::Transport::NamedPipes::DEFAULT_CONFIG
-
-    # Verify that namespace has a default value
-    assert config[:namespace].is_a?(String)
-    refute config[:namespace].empty?
+    assert_equal @test_dir, transport.options[:base_path]
+    assert_equal "from_env", transport.options[:namespace]
+  ensure
+    ENV["SMART_MESSAGE_PIPE_BASE"], ENV["SMART_MESSAGE_NAMESPACE"] = original
   end
 
   def test_initialization_creates_required_structures
