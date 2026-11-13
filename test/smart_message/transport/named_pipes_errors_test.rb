@@ -32,8 +32,7 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
 
     nonexistent_pipe = File.join(@test_dir, "nonexistent.pipe")
 
-    # Today write_to_pipe opens with 'w', so a missing pipe becomes a regular
-    # file and nothing raises. That is a known lib bug; this test only checks
+    # A missing pipe is logged and the message dropped; this test only checks
     # that no unexpected error escapes, and stays inside @test_dir.
     begin
       transport.send(:write_to_pipe, nonexistent_pipe, "test data")

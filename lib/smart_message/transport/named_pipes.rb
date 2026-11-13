@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+# Load the whole framework: smart_message 0.1.0 autoloads through Zeitwerk,
+# and Base alone leaves SmartMessage::Dispatcher undefined.
+require 'smart_message'
 require 'smart_message/transport/base'
 require 'fileutils'
 require 'timeout'
@@ -115,7 +118,7 @@ module SmartMessage
         channel_name = derive_channel_name(message_class)
         pipe_name = subscriber_pipe_name(channel_name)
 
-        unless File.exist?(pipe_name)
+        unless File.pipe?(pipe_name)
           logger.debug { "[NamedPipes] No subscriber pipe found for #{channel_name} at #{pipe_name}, message dropped" }
           return
         end
@@ -231,7 +234,10 @@ module SmartMessage
 
       def create_subscriber_pipe(channel_name)
         pipe_name = subscriber_pipe_name(channel_name)
-        return if File.exist?(pipe_name)
+        return if File.pipe?(pipe_name)
+        if File.exist?(pipe_name)
+          raise Error, "Failed to create named pipe: #{pipe_name} exists and is not a FIFO"
+        end
 
         begin
           system("mkfifo", pipe_name)
@@ -321,7 +327,9 @@ module SmartMessage
         begin
           # Use timeout to prevent hanging on blocked pipes
           Timeout.timeout(@options[:timeout]) do
-            File.open(pipe_name, 'w') do |pipe|
+            # WRONLY without CREAT: a missing pipe raises ENOENT instead of
+            # leaving a regular file at the pipe path.
+            File.open(pipe_name, File::WRONLY) do |pipe|
               pipe.puts(data)
               pipe.flush
             end
@@ -335,6 +343,8 @@ module SmartMessage
         rescue Errno::ENXIO => e
           logger.warn { "[NamedPipes] No reader for pipe #{pipe_name}" }
           # Don't raise - pipe exists but no reader yet
+        rescue Errno::ENOENT
+          logger.debug { "[NamedPipes] Subscriber pipe #{pipe_name} was removed, message dropped" }
         rescue SystemCallError => e
           logger.error { "[NamedPipes] System error writing to pipe #{pipe_name}: #{e.class} - #{e.message}" }
           raise Error, "System error writing to named pipe: #{e.class} - #{e.message}"
