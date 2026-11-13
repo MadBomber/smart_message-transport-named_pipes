@@ -28,6 +28,10 @@ module SmartMessage
         @dispatcher.drop(message_class, process_method)
       end
 
+      def unsubscribe!(message_class)
+        @dispatcher.drop_all(message_class)
+      end
+
       def receive(message_class_name, serialized_data)
         # To be implemented - would deserialize and dispatch
       end
@@ -62,6 +66,10 @@ module SmartMessage
 
         def drop(message_class, process_method)
           @subscribers[String(message_class)].delete(process_method)
+        end
+
+        def drop_all(message_class)
+          @subscribers.delete(String(message_class))
         end
       end
 

@@ -22,15 +22,20 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
     FileUtils.rm_rf(@test_dir) if File.exist?(@test_dir)
   end
 
+  # Assigned to @transport so teardown disconnects it.
+  def new_transport
+    @transport = SmartMessage::Transport::NamedPipes.new(**@options)
+  end
+
   def test_write_to_nonexistent_pipe
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
-    nonexistent_pipe = "/tmp/nonexistent_pipe_12345.pipe"
+    nonexistent_pipe = File.join(@test_dir, "nonexistent.pipe")
 
-    # Writing to nonexistent pipe should timeout or raise error
-    # The behavior depends on whether the pipe exists
-    # For a truly nonexistent pipe, it will timeout
+    # Today write_to_pipe opens with 'w', so a missing pipe becomes a regular
+    # file and nothing raises. That is a known lib bug; this test only checks
+    # that no unexpected error escapes, and stays inside @test_dir.
     begin
       transport.send(:write_to_pipe, nonexistent_pipe, "test data")
       # If no error, that's also acceptable (e.g., ENXIO was caught)
@@ -48,7 +53,7 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
   end
 
   def test_timeout_on_write_to_blocked_pipe
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     channel_name = "blocked_pipe"
@@ -69,9 +74,7 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
   end
 
   def test_publish_to_nonexistent_channel
-    skip "Requires full SmartMessage framework"
-
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     # Publishing to a channel with no subscribers should not raise
@@ -82,7 +85,7 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
   def test_error_handling_with_corrupt_data
     skip "Requires full SmartMessage framework for deserialization"
 
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     channel_name = "corrupt_data"
@@ -102,7 +105,7 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
   end
 
   def test_cleanup_with_open_file_descriptors
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     channel_name = "open_fd_test"
@@ -127,7 +130,7 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
   end
 
   def test_concurrent_cleanup_safety
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     # Create several pipes
@@ -156,7 +159,7 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
   end
 
   def test_remove_nonexistent_pipe
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     # Removing a pipe that doesn't exist should not raise
@@ -164,7 +167,7 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
   end
 
   def test_double_cleanup
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     # Create a pipe
@@ -178,7 +181,7 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
   end
 
   def test_empty_channel_name
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     # Empty channel name should still create a valid pipe path
@@ -189,7 +192,7 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
   end
 
   def test_special_characters_in_channel_name
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     # Channel names with special characters
@@ -208,7 +211,7 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
   end
 
   def test_very_long_channel_name
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     # Very long channel name (testing filename limits)
@@ -224,7 +227,7 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
   end
 
   def test_shutdown_flag_thread_visibility
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     # Start a thread that checks shutdown flag
@@ -258,7 +261,7 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
   end
 
   def test_write_after_disconnect
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     channel_name = "disconnect_test"

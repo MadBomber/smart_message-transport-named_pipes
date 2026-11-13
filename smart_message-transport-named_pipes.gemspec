@@ -2,7 +2,10 @@
 
 Gem::Specification.new do |spec|
   spec.name = "smart_message-transport-named_pipes"
-  spec.version = "0.0.1"
+  # Read VERSION as text: requiring version.rb would open NamedPipes without
+  # its Base superclass and break the later `class NamedPipes < Base`.
+  version_rb = File.read(File.expand_path("lib/smart_message/transport/named_pipes/version.rb", __dir__))
+  spec.version = version_rb[/VERSION\s*=\s*["']([^"']+)["']/, 1]
   spec.authors = ["Dewayne VanHoozer"]
   spec.email = ["dewayne@vanhoozer.me"]
 
@@ -27,11 +30,9 @@ Gem::Specification.new do |spec|
       # packaged, or it could shadow the canonical smart_message base.
       (f == gemspec) ||
         (f == "lib/smart_message/transport/base.rb") ||
-        f.start_with?(*%w[bin/ Gemfile .gitignore test/ .rubocop.yml])
+        f.start_with?(*%w[bin/ Gemfile .gitignore test/ .rubocop.yml .envrc .github/ Rakefile])
     end
   end
-  spec.bindir = "exe"
-  spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
   # Runtime dependencies
