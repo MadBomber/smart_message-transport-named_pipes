@@ -27,11 +27,9 @@ Gem::Specification.new do |spec|
       # packaged, or it could shadow the canonical smart_message base.
       (f == gemspec) ||
         (f == "lib/smart_message/transport/base.rb") ||
-        f.start_with?(*%w[bin/ Gemfile .gitignore test/ .rubocop.yml])
+        f.start_with?(*%w[bin/ Gemfile .gitignore test/ .rubocop.yml .envrc .github/ Rakefile])
     end
   end
-  spec.bindir = "exe"
-  spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
   # Runtime dependencies
