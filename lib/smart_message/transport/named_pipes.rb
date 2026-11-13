@@ -259,14 +259,14 @@ module SmartMessage
           Thread.current.name = "NamedPipes-#{channel_name}"
           
           begin
-            while !@shutdown
+            while !@shutdown && !Thread.current.thread_variable_get(:stop)
               begin
                 # Open read-write so this reader also holds a write end: the
                 # FIFO never reaches EOF between publishers, so a writer can't
                 # hit a closed pipe (EPIPE) or have its data discarded while
                 # the reader would otherwise be closing and reopening.
                 File.open(pipe_name, 'r+') do |pipe|
-                  while !@shutdown
+                  while !@shutdown && !Thread.current.thread_variable_get(:stop)
                     if IO.select([pipe], nil, nil, 0.1) # 100ms timeout
                       data = pipe.gets
                       if data && !data.strip.empty?
@@ -308,13 +308,11 @@ module SmartMessage
 
       def stop_pipe_reader(channel_name)
         reader_thread = @mutex.synchronize { @pipe_readers.delete(channel_name) }
-        if reader_thread && reader_thread.alive?
-          # Signal shutdown and wait for thread to exit gracefully
-          # Thread will exit on next @shutdown check in loop
-          reader_thread.join(2.0) # Wait up to 2 seconds
-          # If still alive, force termination
-          reader_thread.kill if reader_thread.alive?
-        end
+        return unless reader_thread&.alive?
+
+        reader_thread.thread_variable_set(:stop, true)
+        reader_thread.join(2.0)
+        reader_thread.kill if reader_thread.alive?
       end
 
       def write_to_pipe(pipe_name, data)

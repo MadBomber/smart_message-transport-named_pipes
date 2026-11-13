@@ -12,6 +12,7 @@
 - Replaced six skip-only error tests with real tests for pipe-creation failures (#45)
 
 ### Fixed
+- `unsubscribe` and `disconnect` stop idle reader threads promptly instead of waiting ~2s per channel and killing them (#14)
 - Messages are no longer lost under bursty publishing: the reader keeps its FIFO open between writers (#18)
 - A message whose `receive` raises no longer drops the other messages read with it or stalls the channel (#23)
 - `disconnect` with `cleanup: false` now stops reader threads; the option only controls pipe removal (#24)
