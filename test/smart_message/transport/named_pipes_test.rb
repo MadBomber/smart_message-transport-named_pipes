@@ -113,6 +113,20 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     transport&.instance_variable_get(:@pipe_readers)&.each_value(&:kill)
   end
 
+  def test_disconnect_without_cleanup_stops_readers_but_keeps_pipes
+    transport = SmartMessage::Transport::NamedPipes.new(**@options, cleanup: false)
+    transport.connect
+    transport.subscribe("KeepMessage", ->(*) {})
+    reader = transport.instance_variable_get(:@pipe_readers)["keepmessage"]
+
+    transport.disconnect
+
+    refute reader.alive?, "reader left running after disconnect"
+    assert File.pipe?(transport.send(:subscriber_pipe_name, "keepmessage"))
+  ensure
+    reader&.kill
+  end
+
   def test_derive_channel_name
     transport = create_mock_transport
 

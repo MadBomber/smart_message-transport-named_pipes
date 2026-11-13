@@ -337,11 +337,11 @@ module SmartMessage
       end
 
       def cleanup_pipes
-        return unless @options[:cleanup]
-
-        # Stop all reader threads
+        # Stop all reader threads; :cleanup only governs removal of pipes
         channel_names = @mutex.synchronize { @pipe_readers.keys.dup }
         channel_names.each { |channel_name| stop_pipe_reader(channel_name) }
+
+        return unless @options[:cleanup]
 
         # Remove all subscriber pipes
         pipes_to_remove = @mutex.synchronize { @subscriber_pipes.values.dup }
