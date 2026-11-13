@@ -120,6 +120,21 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     transport&.instance_variable_get(:@pipe_readers)&.each_value(&:kill)
   end
 
+  def test_disconnect_stops_idle_readers_promptly
+    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport.connect
+    %w[FastA FastB FastC].each { |name| transport.subscribe(name, ->(*) {}) }
+    readers = transport.instance_variable_get(:@pipe_readers).values
+    sleep 0.2 # let the readers block opening their FIFOs
+
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    transport.disconnect
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+
+    assert_operator elapsed, :<, 1.0
+    assert readers.none?(&:alive?)
+  end
+
   def test_derive_channel_name
     transport = create_mock_transport
 

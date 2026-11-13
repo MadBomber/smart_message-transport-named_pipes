@@ -240,11 +240,11 @@ module SmartMessage
           Thread.current.name = "NamedPipes-#{channel_name}"
           
           begin
-            while !@shutdown
+            while !@shutdown && !Thread.current.thread_variable_get(:stop)
               # Open pipe in non-blocking mode to avoid hanging
               begin
                 File.open(pipe_name, 'r') do |pipe|
-                  while !@shutdown && !pipe.eof?
+                  while !@shutdown && !Thread.current.thread_variable_get(:stop) && !pipe.eof?
                     if IO.select([pipe], nil, nil, 0.1) # 100ms timeout
                       data = pipe.gets
                       if data && !data.strip.empty?
@@ -281,13 +281,28 @@ module SmartMessage
 
       def stop_pipe_reader(channel_name)
         reader_thread = @mutex.synchronize { @pipe_readers.delete(channel_name) }
-        if reader_thread && reader_thread.alive?
-          # Signal shutdown and wait for thread to exit gracefully
-          # Thread will exit on next @shutdown check in loop
-          reader_thread.join(2.0) # Wait up to 2 seconds
-          # If still alive, force termination
-          reader_thread.kill if reader_thread.alive?
+        return unless reader_thread&.alive?
+
+        reader_thread.thread_variable_set(:stop, true)
+        pipe_name = subscriber_pipe_name(channel_name)
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 2.0
+
+        until reader_thread.join(0.05)
+          break if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+
+          wake_pipe_reader(pipe_name)
         end
+
+        reader_thread.kill if reader_thread.alive?
+      end
+
+      # A reader blocked in File.open(pipe, 'r') cannot be interrupted, so open
+      # and close the FIFO for writing: the open returns, the reader sees EOF
+      # and checks its stop flag.
+      def wake_pipe_reader(pipe_name)
+        File.open(pipe_name, File::WRONLY | File::NONBLOCK).close
+      rescue SystemCallError
+        # No reader currently has the FIFO open (ENXIO) or it is already gone
       end
 
       def write_to_pipe(pipe_name, data)

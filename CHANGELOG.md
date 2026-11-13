@@ -11,6 +11,7 @@
 - Stop packaging the test-only transport/base.rb stub in the gem
 
 ### Fixed
+- `unsubscribe` and `disconnect` stop idle reader threads promptly instead of waiting ~2s per channel and killing them (#14)
 - `connect` after `disconnect` restores the transport instead of leaving it shut down (#17)
 - Corrected README channel-derivation example and stale `Running Tests` file paths
 - `unsubscribe` no longer removes the pipe and reader while other handlers for the class remain subscribed (#13)
