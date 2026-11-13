@@ -241,10 +241,13 @@ module SmartMessage
           
           begin
             while !@shutdown
-              # Open pipe in non-blocking mode to avoid hanging
               begin
-                File.open(pipe_name, 'r') do |pipe|
-                  while !@shutdown && !pipe.eof?
+                # Open read-write so this reader also holds a write end: the
+                # FIFO never reaches EOF between publishers, so a writer can't
+                # hit a closed pipe (EPIPE) or have its data discarded while
+                # the reader would otherwise be closing and reopening.
+                File.open(pipe_name, 'r+') do |pipe|
+                  while !@shutdown
                     if IO.select([pipe], nil, nil, 0.1) # 100ms timeout
                       data = pipe.gets
                       if data && !data.strip.empty?

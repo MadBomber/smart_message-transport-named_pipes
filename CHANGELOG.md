@@ -11,6 +11,7 @@
 - Stop packaging the test-only transport/base.rb stub in the gem
 
 ### Fixed
+- Messages are no longer lost under bursty publishing: the reader keeps its FIFO open between writers (#18)
 - `connect` after `disconnect` restores the transport instead of leaving it shut down (#17)
 - Corrected README channel-derivation example and stale `Running Tests` file paths
 - `unsubscribe` no longer removes the pipe and reader while other handlers for the class remain subscribed (#13)

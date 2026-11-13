@@ -258,6 +258,22 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     refute transport.send(:subscribers?, ProbeMessage)
   end
 
+  def test_burst_of_publishes_loses_no_messages
+    @transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    received = Queue.new
+    @transport.define_singleton_method(:receive) { |_klass, data| received << data }
+    @transport.connect
+    @transport.subscribe(ProbeMessage, "Probe.first")
+
+    count = 2000
+    count.times { |i| @transport.do_publish(ProbeMessage, "msg#{i}") }
+
+    got = Array.new(count) { received.pop(timeout: 2) }
+    assert_equal count, got.compact.uniq.size
+  ensure
+    @transport&.disconnect
+  end
+
   private
 
   def subscribed_probe_transport
