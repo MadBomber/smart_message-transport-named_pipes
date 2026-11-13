@@ -94,9 +94,15 @@ module SmartMessage
 
       # Return default configuration options.
       #
-      # @return [Hash] default options from DEFAULT_CONFIG
+      # SMART_MESSAGE_PIPE_BASE and SMART_MESSAGE_NAMESPACE are read at call
+      # time, so they take effect even when set after the gem is required.
+      #
+      # @return [Hash] default options from DEFAULT_CONFIG and the environment
       def default_options
-        DEFAULT_CONFIG
+        DEFAULT_CONFIG.merge(
+          base_path: ENV.fetch('SMART_MESSAGE_PIPE_BASE', DEFAULT_CONFIG[:base_path]),
+          namespace: ENV.fetch('SMART_MESSAGE_NAMESPACE', DEFAULT_CONFIG[:namespace])
+        )
       end
 
       # Publish a message to the transport.
@@ -152,11 +158,18 @@ module SmartMessage
       # @return [void]
       def unsubscribe(message_class, process_method)
         super(message_class, process_method)
-        return if subscribers?(message_class)
+        release_channel(message_class) unless subscribers?(message_class)
+      end
 
-        channel_name = derive_channel_name(message_class)
-        stop_pipe_reader(channel_name)
-        remove_subscriber_pipe(channel_name)
+      # Unsubscribe every handler for a message class.
+      #
+      # Stops the reader thread and removes the subscriber pipe.
+      #
+      # @param message_class [Class] the message class to unsubscribe from
+      # @return [void]
+      def unsubscribe!(message_class)
+        super(message_class)
+        release_channel(message_class)
       end
 
       # Check if the transport is currently connected.
@@ -200,6 +213,12 @@ module SmartMessage
       def subscribers?(message_class)
         handlers = @dispatcher.subscribers.fetch(String(message_class), nil)
         !(handlers.nil? || handlers.empty?)
+      end
+
+      def release_channel(message_class)
+        channel_name = derive_channel_name(message_class)
+        stop_pipe_reader(channel_name)
+        remove_subscriber_pipe(channel_name)
       end
 
       def derive_channel_name(message_class)
@@ -249,7 +268,12 @@ module SmartMessage
                       data = pipe.gets
                       if data && !data.strip.empty?
                         logger.debug { "[NamedPipes] Received #{data.bytesize} bytes on #{channel_name}" }
-                        receive(message_class.to_s, data.strip)
+                        begin
+                          receive(message_class.to_s, data.strip)
+                        rescue => e
+                          # Skip only this message; keep reading the rest of the buffer
+                          logger.error { "[NamedPipes] Error processing message on #{channel_name}: #{e.class} - #{e.message}" }
+                        end
                       end
                     end
                   end
@@ -333,11 +357,11 @@ module SmartMessage
       end
 
       def cleanup_pipes
-        return unless @options[:cleanup]
-
-        # Stop all reader threads
+        # Stop all reader threads; :cleanup only governs removal of pipes
         channel_names = @mutex.synchronize { @pipe_readers.keys.dup }
         channel_names.each { |channel_name| stop_pipe_reader(channel_name) }
+
+        return unless @options[:cleanup]
 
         # Remove all subscriber pipes
         pipes_to_remove = @mutex.synchronize { @subscriber_pipes.values.dup }
