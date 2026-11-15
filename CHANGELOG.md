@@ -11,6 +11,7 @@
 - Stop packaging the test-only transport/base.rb stub in the gem
 - Un-skipped the multiple-messages integration test with a read-write reader (#46)
 - Replaced six skip-only error tests with real tests for pipe-creation failures (#45)
+- Gemspec metadata: add bug tracker, documentation and MFA-required URIs; drop duplicate homepage_uri
 
 ### Fixed
 - `unsubscribe` and `disconnect` stop idle reader threads promptly instead of waiting ~2s per channel and killing them (#14)
