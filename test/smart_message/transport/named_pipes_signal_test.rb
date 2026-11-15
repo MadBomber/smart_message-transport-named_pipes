@@ -8,7 +8,7 @@ require "rbconfig"
 require "timeout"
 
 class SmartMessage::Transport::NamedPipesSignalTest < Minitest::Test
-  LIB_DIR = File.expand_path("../../../lib", __dir__)
+  ROOT = File.expand_path("../../..", __dir__)
 
   # A child process that subscribes (so a reader thread and a FIFO exist),
   # reports the pipe path, then waits to be signalled.
@@ -21,6 +21,12 @@ class SmartMessage::Transport::NamedPipesSignalTest < Minitest::Test
     $stdout.flush
     sleep
   RUBY
+
+  # test/ goes on the load path ahead of the installed gems, as in CI, so the
+  # child loads the test/smart_message.rb stub rather than the real gem.
+  CHILD_COMMAND = [
+    RbConfig.ruby, "-I", File.join(ROOT, "test"), "-I", File.join(ROOT, "lib"), "-e", CHILD_SCRIPT
+  ].freeze
 
   def setup
     @test_dir = Dir.mktmpdir("named_pipes_signal")
@@ -53,7 +59,7 @@ class SmartMessage::Transport::NamedPipesSignalTest < Minitest::Test
   private
 
   def run_child_and_signal(signal)
-    Open3.popen3(RbConfig.ruby, "-I", LIB_DIR, "-e", CHILD_SCRIPT, @test_dir) do |stdin, stdout, stderr, wait_thr|
+    Open3.popen3(*CHILD_COMMAND, @test_dir) do |stdin, stdout, stderr, wait_thr|
       stdin.close
       pipe_name = Timeout.timeout(5) { stdout.gets }.to_s.chomp
       assert File.pipe?(pipe_name), "child should have created its FIFO"
