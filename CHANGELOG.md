@@ -10,6 +10,7 @@
 - Single-source the VERSION constant via version.rb
 - Stop packaging the test-only transport/base.rb stub in the gem
 - Un-skipped the multiple-messages integration test with a read-write reader (#46)
+- The test stub logger now evaluates log message blocks, so errors inside them fail the suite (#60)
 - Replaced six skip-only error tests with real tests for pipe-creation failures (#45)
 - Gemspec metadata: add bug tracker, documentation and MFA-required URIs; drop duplicate homepage_uri
 
