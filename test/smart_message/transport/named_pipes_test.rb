@@ -113,6 +113,39 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     transport&.instance_variable_get(:@pipe_readers)&.each_value(&:kill)
   end
 
+  def test_disconnect_stops_idle_readers_promptly
+    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport.connect
+    %w[FastA FastB FastC].each { |name| transport.subscribe(name, ->(*) {}) }
+    readers = transport.instance_variable_get(:@pipe_readers).values
+    sleep 0.2 # let the readers become idle
+
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    transport.disconnect
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+
+    assert_operator elapsed, :<, 1.0
+    assert readers.none?(&:alive?)
+  end
+
+  def test_unsubscribe_stops_idle_reader_promptly
+    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport.connect
+    handler = ->(*) {}
+    transport.subscribe("FastA", handler)
+    reader = transport.instance_variable_get(:@pipe_readers)["fasta"]
+    sleep 0.2
+
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    transport.unsubscribe("FastA", handler)
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+
+    assert_operator elapsed, :<, 1.0
+    refute reader.alive?
+  ensure
+    transport&.disconnect
+  end
+
   def test_disconnect_without_cleanup_stops_readers_but_keeps_pipes
     transport = SmartMessage::Transport::NamedPipes.new(**@options, cleanup: false)
     transport.connect
