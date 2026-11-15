@@ -139,7 +139,10 @@ module SmartMessage
       # @param process_method [Method, Proc] the method/proc to call when a message is received
       # @param filter_options [Hash] optional filter options (passed to parent)
       # @return [void]
+      # @raise [Error] if the transport is disconnected
       def subscribe(message_class, process_method, filter_options = {})
+        raise Error, "transport is disconnected; call #connect first" if @shutdown
+
         super(message_class, process_method, filter_options)
 
         channel_name = derive_channel_name(message_class)
