@@ -72,6 +72,32 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
     assert_nil transport.do_publish("NonexistentClass", "serialized data")
   end
 
+  def test_publish_to_pipe_without_reader_raises_timeout
+    @options[:timeout] = 0.3
+    transport = new_transport
+    transport.configure
+    transport.send(:create_subscriber_pipe, "noreader")
+
+    error = assert_raises(SmartMessage::Transport::NamedPipes::Error) do
+      transport.do_publish("NoReader", "data")
+    end
+    assert_match(/Timeout writing to named pipe after 0.3 seconds/, error.message)
+  end
+
+  def test_publish_to_unwritable_pipe_raises_system_error
+    skip "root ignores file permissions" if Process.euid.zero?
+
+    transport = new_transport
+    transport.configure
+    transport.send(:create_subscriber_pipe, "readonly")
+    File.chmod(0o400, transport.send(:subscriber_pipe_name, "readonly"))
+
+    error = assert_raises(SmartMessage::Transport::NamedPipes::Error) do
+      transport.do_publish("ReadOnly", "data")
+    end
+    assert_match(/System error writing to named pipe: Errno::EACCES/, error.message)
+  end
+
   def test_cleanup_with_open_file_descriptors
     transport = new_transport
     transport.configure
