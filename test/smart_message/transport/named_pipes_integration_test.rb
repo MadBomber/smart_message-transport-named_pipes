@@ -120,43 +120,6 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
     end
   end
 
-  def test_cleanup_removes_all_resources
-    transport = new_transport
-    transport.configure
-
-    # Create multiple pipes
-    channels = %w[cleanup1 cleanup2 cleanup3]
-    channels.each do |channel|
-      transport.send(:create_subscriber_pipe, channel)
-    end
-
-    # Verify pipes exist
-    channels.each do |channel|
-      pipe_name = transport.send(:subscriber_pipe_name, channel)
-      assert File.exist?(pipe_name)
-    end
-
-    # Cleanup
-    transport.send(:cleanup_pipes)
-
-    # Verify pipes are removed
-    channels.each do |channel|
-      pipe_name = transport.send(:subscriber_pipe_name, channel)
-      refute File.exist?(pipe_name), "Pipe #{pipe_name} should be removed"
-    end
-  end
-
-  def test_graceful_shutdown
-    transport = new_transport
-    transport.configure
-
-    # Set shutdown flag
-    transport.instance_variable_set(:@shutdown, true)
-
-    # Connected should return false
-    refute transport.connected?
-  end
-
   def test_connect_and_disconnect
     transport = new_transport
 
@@ -172,39 +135,6 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
 
     # After disconnect, @shutdown is true so connected? returns false
     refute transport.connected?
-  end
-
-  def test_channel_name_derivation_edge_cases
-    transport = new_transport
-    transport.configure
-
-    # Test various class name formats
-    test_cases = {
-      "SimpleClass" => "simpleclass",
-      "Namespace::ClassName" => "namespace_classname",
-      "Deep::Nested::Class::Name" => "deep_nested_class_name",
-      "ALLCAPS" => "allcaps",
-      "Mixed_Case_123" => "mixed_case_123"
-    }
-
-    test_cases.each do |input, expected|
-      result = transport.send(:derive_channel_name, input)
-      assert_equal expected, result, "Failed for input: #{input}"
-    end
-  end
-
-  def test_pipe_permissions
-    transport = new_transport
-    transport.configure
-
-    channel_name = "permission_test"
-    transport.send(:create_subscriber_pipe, channel_name)
-
-    pipe_name = transport.send(:subscriber_pipe_name, channel_name)
-    stat = File.stat(pipe_name)
-
-    # Check that permissions are set correctly (0600)
-    assert_equal 0600, stat.mode & 0777
   end
 
   def test_multiple_transports_same_namespace

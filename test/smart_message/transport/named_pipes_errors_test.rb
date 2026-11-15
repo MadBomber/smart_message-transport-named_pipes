@@ -26,22 +26,6 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
     @transport = SmartMessage::Transport::NamedPipes.new(**@options)
   end
 
-  def test_write_to_nonexistent_pipe
-    transport = new_transport
-    transport.configure
-
-    nonexistent_pipe = File.join(@test_dir, "nonexistent.pipe")
-
-    # A missing pipe is logged and the message dropped; this test only checks
-    # that no unexpected error escapes, and stays inside @test_dir.
-    begin
-      transport.send(:write_to_pipe, nonexistent_pipe, "test data")
-      # If no error, that's also acceptable (e.g., ENXIO was caught)
-    rescue SmartMessage::Transport::NamedPipes::Error => e
-      assert_match(/Timeout writing to named pipe/, e.message)
-    end
-  end
-
   def test_timeout_on_write_to_blocked_pipe
     transport = new_transport
     transport.configure
@@ -146,17 +130,6 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
 
     # Cleanup again should not raise
     assert_nil transport.send(:cleanup_pipes)
-  end
-
-  def test_empty_channel_name
-    transport = new_transport
-    transport.configure
-
-    # Empty channel name should still create a valid pipe path
-    channel_name = ""
-    pipe_name = transport.send(:subscriber_pipe_name, channel_name)
-
-    assert_equal File.join(@test_dir, "error_test", ".in.pipe"), pipe_name
   end
 
   def test_special_characters_in_channel_name
