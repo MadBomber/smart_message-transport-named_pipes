@@ -327,6 +327,25 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     @transport&.disconnect
   end
 
+  def test_subscribe_rejects_a_class_whose_channel_is_bound_to_another
+    @transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    @transport.connect
+    @transport.subscribe("Billing::Event", "Probe.first")
+
+    error = assert_raises(SmartMessage::Transport::NamedPipes::Error) do
+      @transport.subscribe("Billing_Event", "Probe.second")
+    end
+    assert_match(/already bound to Billing::Event/, error.message)
+    refute @transport.dispatcher.subscribers.key?("Billing_Event"), "rejected class was still subscribed"
+
+    @transport.subscribe("Billing::Event", "Probe.second")
+    @transport.unsubscribe!("Billing::Event")
+    @transport.subscribe("Billing_Event", "Probe.second")
+    assert File.pipe?(@transport.send(:subscriber_pipe_name, "billing_event"))
+  ensure
+    @transport&.disconnect
+  end
+
   def test_subscribers_predicate_treats_missing_or_empty_as_none
     transport = create_mock_transport
     dispatcher = SmartMessage::Transport::Base::Dispatcher.new
