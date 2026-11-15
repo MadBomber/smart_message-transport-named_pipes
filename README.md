@@ -318,14 +318,21 @@ After checking out the repo, run `bundle install` to install dependencies.
 
 ### Running Tests
 
+`rake` and `minitest` ship with Ruby; the Rakefile also loads RuboCop's rake task. Run plain `rake test`, not `bundle exec rake test`, because Bundler can't resolve `smart_message` yet ([#6](https://github.com/MadBomber/smart_message-transport-named_pipes/issues/6)).
+
 ```bash
 # Run all tests
-ruby -Ilib:test test/smart_message/transport/named_pipes_test.rb
-ruby -Ilib:test test/smart_message/transport/named_pipes_integration_test.rb
-ruby -Ilib:test test/smart_message/transport/named_pipes_errors_test.rb
-
-# Or using rake (if available)
+gem install rubocop
 rake test
+```
+
+Or run each test file directly, as CI does:
+
+```bash
+for f in test/smart_message/transport/*_test.rb; do
+  echo "== $f =="
+  ruby -Itest -Ilib "$f"
+done
 ```
 
 ### Code Style
