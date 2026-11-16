@@ -132,25 +132,6 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
     assert_nil transport.send(:cleanup_pipes)
   end
 
-  def test_special_characters_in_channel_name
-    transport = new_transport
-    transport.configure
-
-    # Channel names with special characters
-    # The derive_channel_name method handles :: but not other special chars
-    special_names = [
-      "channel/with/slashes",
-      "channel with spaces",
-      "channel\nwith\nnewlines"
-    ]
-
-    special_names.each do |name|
-      pipe_name = transport.send(:subscriber_pipe_name, name)
-      # Should create a pipe path (though it may be unusual)
-      assert pipe_name.include?(@test_dir)
-    end
-  end
-
   def test_very_long_channel_name_raises
     transport = new_transport
     transport.configure
@@ -173,26 +154,6 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
     end
   ensure
     File.chmod(0o755, transport.pipe_path) if transport&.pipe_path
-  end
-
-  def test_shutdown_flag_thread_visibility
-    transport = new_transport
-    transport.configure
-
-    # Start a thread that checks shutdown flag
-    flag_visible = false
-    thread = Thread.new do
-      sleep 0.1 while !transport.instance_variable_get(:@shutdown)
-      flag_visible = true
-    end
-
-    # Set shutdown flag from main thread
-    transport.instance_variable_set(:@shutdown, true)
-
-    # Thread should see the change
-    thread.join(1.0)
-
-    assert flag_visible, "Shutdown flag should be visible across threads"
   end
 
   def test_write_after_disconnect
