@@ -99,6 +99,19 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     transport&.disconnect
   end
 
+  def test_subscribe_after_disconnect_raises
+    transport = SmartMessage::Transport::NamedPipes.new(**@options, cleanup: false)
+    transport.connect
+    transport.disconnect
+
+    error = assert_raises(SmartMessage::Transport::NamedPipes::Error) do
+      transport.subscribe("LateMessage", ->(*) {})
+    end
+    assert_match(/disconnected; call #connect first/, error.message)
+    assert_empty transport.instance_variable_get(:@pipe_readers)
+    refute File.exist?(transport.send(:subscriber_pipe_name, "latemessage"))
+  end
+
   def test_subscribe_after_reconnect_replaces_dead_reader
     transport = SmartMessage::Transport::NamedPipes.new(**@options, cleanup: false)
     transport.connect
@@ -163,13 +176,15 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
   def test_derive_channel_name
     transport = create_mock_transport
 
-    # Test with simple class name
-    channel = transport.send(:derive_channel_name, "TestMessage")
-    assert_equal "testmessage", channel
-
-    # Test with namespaced class name
-    channel = transport.send(:derive_channel_name, "Foo::Bar::TestMessage")
-    assert_equal "foo_bar_testmessage", channel
+    {
+      "TestMessage" => "testmessage",
+      "Foo::Bar::TestMessage" => "foo_bar_testmessage",
+      "Deep::Nested::Class::Name" => "deep_nested_class_name",
+      "ALLCAPS" => "allcaps",
+      "Mixed_Case_123" => "mixed_case_123"
+    }.each do |input, expected|
+      assert_equal expected, transport.send(:derive_channel_name, input), "Failed for input: #{input}"
+    end
   end
 
   def test_subscriber_pipe_name_format
@@ -323,6 +338,25 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
 
     refute File.exist?(probe_pipe_name), "pipe left behind after unsubscribe!"
     refute probe_reader?, "reader left running after unsubscribe!"
+  ensure
+    @transport&.disconnect
+  end
+
+  def test_subscribe_rejects_a_class_whose_channel_is_bound_to_another
+    @transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    @transport.connect
+    @transport.subscribe("Billing::Event", "Probe.first")
+
+    error = assert_raises(SmartMessage::Transport::NamedPipes::Error) do
+      @transport.subscribe("Billing_Event", "Probe.second")
+    end
+    assert_match(/already bound to Billing::Event/, error.message)
+    refute @transport.dispatcher.subscribers.key?("Billing_Event"), "rejected class was still subscribed"
+
+    @transport.subscribe("Billing::Event", "Probe.second")
+    @transport.unsubscribe!("Billing::Event")
+    @transport.subscribe("Billing_Event", "Probe.second")
+    assert File.pipe?(@transport.send(:subscriber_pipe_name, "billing_event"))
   ensure
     @transport&.disconnect
   end

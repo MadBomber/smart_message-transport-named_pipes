@@ -77,6 +77,7 @@ module SmartMessage
         @subscriber_pipes = {}
         @publisher_pipes = {}
         @pipe_readers = {}
+        @channel_classes = {}
         @shutdown = false
         @mutex = Mutex.new
 
@@ -139,10 +140,16 @@ module SmartMessage
       # @param process_method [Method, Proc] the method/proc to call when a message is received
       # @param filter_options [Hash] optional filter options (passed to parent)
       # @return [void]
+      # @raise [Error] if the transport is disconnected
+      # @raise [Error] if another message class already uses the same channel
       def subscribe(message_class, process_method, filter_options = {})
-        super(message_class, process_method, filter_options)
+        raise Error, "transport is disconnected; call #connect first" if @shutdown
 
         channel_name = derive_channel_name(message_class)
+        bind_channel(channel_name, message_class)
+
+        super(message_class, process_method, filter_options)
+
         create_subscriber_pipe(channel_name)
 
         # Thread-safe check to avoid starting duplicate readers; a reader that
@@ -222,6 +229,19 @@ module SmartMessage
         channel_name = derive_channel_name(message_class)
         stop_pipe_reader(channel_name)
         remove_subscriber_pipe(channel_name)
+        @mutex.synchronize { @channel_classes.delete(channel_name) }
+      end
+
+      # derive_channel_name is lossy (case and "::" vs "_"), so two classes can
+      # map to one pipe. Its reader dispatches every message as the first
+      # class, so refuse a second class instead of misrouting silently.
+      def bind_channel(channel_name, message_class)
+        class_name = String(message_class)
+        bound = @mutex.synchronize { @channel_classes[channel_name] ||= class_name }
+        return if bound == class_name
+
+        raise Error, "channel #{channel_name.inspect} is already bound to #{bound}; " \
+                     "#{class_name} maps to the same named pipe"
       end
 
       def derive_channel_name(message_class)
@@ -240,6 +260,7 @@ module SmartMessage
         end
 
         begin
+          FileUtils.mkdir_p(@pipe_path, mode: 0755)
           system("mkfifo", pipe_name)
           File.chmod(@options[:permissions], pipe_name)
           @mutex.synchronize { @subscriber_pipes[channel_name] = pipe_name }
@@ -374,14 +395,9 @@ module SmartMessage
           @subscriber_pipes.clear
           @publisher_pipes.clear
         end
-        
-        # Remove pipe directory if empty
-        begin
-          Dir.rmdir(@pipe_path) if @pipe_path && File.directory?(@pipe_path) && Dir.empty?(@pipe_path)
-        rescue => e
-          logger.debug { "[NamedPipes] Could not remove pipe directory: #{e.message}" }
-        end
-        
+
+        # The namespace directory is left in place: other transports sharing
+        # this base_path/namespace may still be using it.
         logger.debug { "[NamedPipes] Pipe cleanup completed" }
       end
 
