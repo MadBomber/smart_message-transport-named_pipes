@@ -34,7 +34,7 @@ gem install smart_message-transport-named_pipes
 
 ## Requirements
 
-- Ruby >= 3.2.0
+- Ruby >= 4.0
 - Unix-like operating system (Linux, macOS, BSD)
 - `mkfifo` command available (standard on all Unix systems)
 - `smart_message` gem >= 0.1.0 (not yet on RubyGems; see [#6](https://github.com/MadBomber/smart_message-transport-named_pipes/issues/6))

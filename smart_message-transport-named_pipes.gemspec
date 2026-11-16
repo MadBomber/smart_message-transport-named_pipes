@@ -13,7 +13,7 @@ Gem::Specification.new do |spec|
   spec.description = "Provides Unix named pipes (FIFO) based transport for the SmartMessage pub/sub messaging system, enabling fast IPC communication between processes on the same machine."
   spec.homepage = "https://github.com/MadBomber/smart_message-transport-named_pipes"
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.2.0"
+  spec.required_ruby_version = ">= 4.0"
 
   spec.metadata["allowed_push_host"] = "https://rubygems.org"
   spec.metadata["source_code_uri"] = spec.homepage
