@@ -160,7 +160,8 @@ transport.disconnect
 ### Thread Model
 
 - One reader thread per subscribed channel
-- Non-blocking I/O with timeouts to prevent hangs
+- Readers poll their pipe every 100 ms with `IO.select`, then read with a blocking `gets`
+- Writes are blocking, bounded by `timeout`: a publish to a pipe with no reader blocks for up to `timeout` seconds (5 s by default) before it raises
 - Graceful shutdown with thread join and cleanup
 
 ### Named Pipe Layout
