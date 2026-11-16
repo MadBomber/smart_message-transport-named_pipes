@@ -140,8 +140,11 @@ module SmartMessage
       # @param process_method [Method, Proc] the method/proc to call when a message is received
       # @param filter_options [Hash] optional filter options (passed to parent)
       # @return [void]
+      # @raise [Error] if the transport is disconnected
       # @raise [Error] if another message class already uses the same channel
       def subscribe(message_class, process_method, filter_options = {})
+        raise Error, "transport is disconnected; call #connect first" if @shutdown
+
         channel_name = derive_channel_name(message_class)
         bind_channel(channel_name, message_class)
 
@@ -257,6 +260,7 @@ module SmartMessage
         end
 
         begin
+          FileUtils.mkdir_p(@pipe_path, mode: 0755)
           system("mkfifo", pipe_name)
           File.chmod(@options[:permissions], pipe_name)
           @mutex.synchronize { @subscriber_pipes[channel_name] = pipe_name }
@@ -391,14 +395,9 @@ module SmartMessage
           @subscriber_pipes.clear
           @publisher_pipes.clear
         end
-        
-        # Remove pipe directory if empty
-        begin
-          Dir.rmdir(@pipe_path) if @pipe_path && File.directory?(@pipe_path) && Dir.empty?(@pipe_path)
-        rescue => e
-          logger.debug { "[NamedPipes] Could not remove pipe directory: #{e.message}" }
-        end
-        
+
+        # The namespace directory is left in place: other transports sharing
+        # this base_path/namespace may still be using it.
         logger.debug { "[NamedPipes] Pipe cleanup completed" }
       end
 
