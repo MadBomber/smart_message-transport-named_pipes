@@ -151,7 +151,7 @@ transport.disconnect
 
 3. **Publishing**: Opens the named pipe for writing and sends serialized message data
    - If no subscriber has created the pipe yet, the message is dropped and only a debug-level log line records it, so start subscribers before publishers.
-   - If the pipe exists but nothing is reading it, the write waits up to `timeout` seconds and then raises (see [Pipe Timeout Errors](#pipe-timeout-errors)).
+   - If the pipe exists but nothing is reading it, the write waits up to `timeout` seconds and then raises: `SmartMessage::Transport::NamedPipes::Error` when you call `transport.publish` directly, or `SmartMessage::Errors::PublishError` when you call `message.publish` through the framework (see [Pipe Timeout Errors](#pipe-timeout-errors)).
 
 4. **Subscribing**: Creates a background thread that continuously reads from the named pipe
 
@@ -247,6 +247,15 @@ Named pipes are extremely fast for IPC on the same machine:
 ### Pipe Timeout Errors
 
 **Error**: `Timeout writing to named pipe after N seconds`
+
+Which exception you get depends on how you publish:
+
+| How you publish | What raises | Dead-lettered? |
+|---|---|---|
+| `transport.publish(msg)` directly | `SmartMessage::Transport::NamedPipes::Error` | no |
+| `msg.publish` through the framework | `SmartMessage::Errors::PublishError` (message: `All transports failed for …: NamedPipes: Timeout writing to named pipe after N seconds`) | yes, written to the dead-letter queue |
+
+`SmartMessage::Errors::PublishError` is not a subclass of `NamedPipes::Error` and carries no `cause`, so `rescue SmartMessage::Transport::NamedPipes::Error` around `msg.publish` never catches it. Rescue `SmartMessage::Errors::PublishError` there instead.
 
 **Cause**: No subscriber is reading from the pipe
 
