@@ -436,13 +436,7 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     transport.instance_variable_set(:@shutdown, false)
     transport.instance_variable_set(:@mutex, Mutex.new)
 
-    # Mock logger
-    logger = Object.new
-    def logger.debug(&block); end
-    def logger.info(&block); end
-    def logger.warn(&block); end
-    def logger.error(&block); end
-    transport.instance_variable_set(:@logger, logger)
+    transport.instance_variable_set(:@logger, SmartMessage::Transport::Base::Logger.new)
 
     transport
   end
