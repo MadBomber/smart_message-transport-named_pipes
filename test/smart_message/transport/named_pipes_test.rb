@@ -99,6 +99,19 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     transport&.disconnect
   end
 
+  def test_subscribe_after_disconnect_raises
+    transport = SmartMessage::Transport::NamedPipes.new(**@options, cleanup: false)
+    transport.connect
+    transport.disconnect
+
+    error = assert_raises(SmartMessage::Transport::NamedPipes::Error) do
+      transport.subscribe("LateMessage", ->(*) {})
+    end
+    assert_match(/disconnected; call #connect first/, error.message)
+    assert_empty transport.instance_variable_get(:@pipe_readers)
+    refute File.exist?(transport.send(:subscriber_pipe_name, "latemessage"))
+  end
+
   def test_subscribe_after_reconnect_replaces_dead_reader
     transport = SmartMessage::Transport::NamedPipes.new(**@options, cleanup: false)
     transport.connect
