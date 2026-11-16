@@ -36,8 +36,8 @@ module SmartMessage
       class Error < StandardError; end
       
       DEFAULT_CONFIG = {
-        base_path: ENV['SMART_MESSAGE_PIPE_BASE'] || '/tmp/smart_message/pipes',
-        namespace: ENV['SMART_MESSAGE_NAMESPACE'] || 'default',
+        base_path: '/tmp/smart_message/pipes',
+        namespace: 'default',
         mode: :unidirectional,      # Recommended for avoiding deadlocks
         permissions: 0600,           # Owner read/write only
         cleanup: true,              # Delete pipes on shutdown
