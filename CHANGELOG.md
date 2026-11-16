@@ -24,6 +24,7 @@
 - `SMART_MESSAGE_PIPE_BASE` and `SMART_MESSAGE_NAMESPACE` are honoured when set after the gem is required (#28)
 - `subscribe` after `disconnect` raises a clear error instead of returning a subscription whose reader has already exited (#65)
 - One transport's `disconnect` (or exit) no longer deletes the namespace directory other transports share; `subscribe` recreates the directory if it is missing (#62)
+- `subscribe` raises when a class's channel is already bound to a different class (e.g. `Billing::Event` and `Billing_Event`) instead of silently delivering its messages as the first class (#61)
 - `connect` after `disconnect` restores the transport instead of leaving it shut down (#17)
 - Corrected README channel-derivation example and stale `Running Tests` file paths
 - README timeout docs name the error class each publish path raises and note framework failures are dead-lettered (#67)

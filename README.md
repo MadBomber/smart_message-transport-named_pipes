@@ -148,6 +148,7 @@ transport.disconnect
 2. **Channel Derivation**: Message class names are converted to channel names:
    - `OrderCreated` → `ordercreated`
    - `MyApp::Events::UserSignedUp` → `myapp_events_usersignedup`
+   - The mapping is lossy, so classes that differ only by case or by `::` versus `_` (for example `Billing::Event` and `Billing_Event`) map to the same pipe. Subscribing to a second such class on the same transport raises `SmartMessage::Transport::NamedPipes::Error` rather than delivering its messages as the first class.
 
 3. **Publishing**: Opens the named pipe for writing and sends serialized message data
    - If no subscriber has created the pipe yet, the message is dropped and only a debug-level log line records it, so start subscribers before publishers.
