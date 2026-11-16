@@ -6,6 +6,7 @@
 ### Removed
 - Removed the unused private `publisher_pipe_name` helper (dead code)
 - Removed two error tests that could never fail (#59)
+- Removed integration and error tests that duplicated unit tests or could not fail; merged the channel-name edge cases into the unit test (#64)
 
 ### Changed
 - Single-source the VERSION constant via version.rb

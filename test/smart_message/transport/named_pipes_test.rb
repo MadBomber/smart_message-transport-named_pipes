@@ -176,13 +176,15 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
   def test_derive_channel_name
     transport = create_mock_transport
 
-    # Test with simple class name
-    channel = transport.send(:derive_channel_name, "TestMessage")
-    assert_equal "testmessage", channel
-
-    # Test with namespaced class name
-    channel = transport.send(:derive_channel_name, "Foo::Bar::TestMessage")
-    assert_equal "foo_bar_testmessage", channel
+    {
+      "TestMessage" => "testmessage",
+      "Foo::Bar::TestMessage" => "foo_bar_testmessage",
+      "Deep::Nested::Class::Name" => "deep_nested_class_name",
+      "ALLCAPS" => "allcaps",
+      "Mixed_Case_123" => "mixed_case_123"
+    }.each do |input, expected|
+      assert_equal expected, transport.send(:derive_channel_name, input), "Failed for input: #{input}"
+    end
   end
 
   def test_subscriber_pipe_name_format
