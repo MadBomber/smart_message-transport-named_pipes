@@ -157,9 +157,23 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
     # transport2 should see the same pipe
     assert File.exist?(pipe_name)
 
-    # Cleanup transport1 shouldn't affect transport2's ability to use pipes
-    # (though it will remove the pipes - this tests the idempotency)
     transport1.disconnect
-    transport2.disconnect
+
+    assert transport2.connected?, "another transport's disconnect removed the shared directory"
+    transport2.subscribe("SharedMessage", ->(*) {})
+    assert File.pipe?(transport2.send(:subscriber_pipe_name, "sharedmessage"))
+  ensure
+    transport1&.disconnect
+    transport2&.disconnect
+  end
+
+  def test_subscribe_recreates_a_removed_namespace_directory
+    transport = new_transport
+    transport.connect
+    Dir.rmdir(transport.pipe_path)
+
+    transport.subscribe("LateMessage", ->(*) {})
+
+    assert File.pipe?(transport.send(:subscriber_pipe_name, "latemessage"))
   end
 end
