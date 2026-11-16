@@ -21,6 +21,7 @@
 - `SMART_MESSAGE_PIPE_BASE` and `SMART_MESSAGE_NAMESPACE` are honoured when set after the gem is required (#28)
 - `connect` after `disconnect` restores the transport instead of leaving it shut down (#17)
 - Corrected README channel-derivation example and stale `Running Tests` file paths
+- README timeout docs name the error class each publish path raises and note framework failures are dead-lettered (#67)
 - `unsubscribe` no longer removes the pipe and reader while other handlers for the class remain subscribed (#13)
 - `unsubscribe!` now removes the subscriber pipe and stops its reader thread (#15)
 - Requiring the transport now loads `smart_message` itself, so it works without a prior `require "smart_message"` (#41)
