@@ -73,11 +73,15 @@ module SmartMessage
         end
       end
 
+      # Evaluates each message block, as smart_message's real logger does, so
+      # an error inside a log message fails the suite instead of production.
       class Logger
-        def debug(&block); end
-        def info(&block); end
-        def warn(&block); end
-        def error(&block); end
+        %i[debug info warn error].each do |level|
+          define_method(level) do |&block|
+            block&.call
+            nil
+          end
+        end
       end
     end
   end

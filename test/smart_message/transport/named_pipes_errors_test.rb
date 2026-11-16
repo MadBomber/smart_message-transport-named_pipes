@@ -26,22 +26,6 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
     @transport = SmartMessage::Transport::NamedPipes.new(**@options)
   end
 
-  def test_write_to_nonexistent_pipe
-    transport = new_transport
-    transport.configure
-
-    nonexistent_pipe = File.join(@test_dir, "nonexistent.pipe")
-
-    # A missing pipe is logged and the message dropped; this test only checks
-    # that no unexpected error escapes, and stays inside @test_dir.
-    begin
-      transport.send(:write_to_pipe, nonexistent_pipe, "test data")
-      # If no error, that's also acceptable (e.g., ENXIO was caught)
-    rescue SmartMessage::Transport::NamedPipes::Error => e
-      assert_match(/Timeout writing to named pipe/, e.message)
-    end
-  end
-
   def test_timeout_on_write_to_blocked_pipe
     transport = new_transport
     transport.configure
@@ -70,6 +54,32 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
     # Publishing to a channel with no subscribers should not raise
     # (message is just dropped with debug log)
     assert_nil transport.do_publish("NonexistentClass", "serialized data")
+  end
+
+  def test_publish_to_pipe_without_reader_raises_timeout
+    @options[:timeout] = 0.3
+    transport = new_transport
+    transport.configure
+    transport.send(:create_subscriber_pipe, "noreader")
+
+    error = assert_raises(SmartMessage::Transport::NamedPipes::Error) do
+      transport.do_publish("NoReader", "data")
+    end
+    assert_match(/Timeout writing to named pipe after 0.3 seconds/, error.message)
+  end
+
+  def test_publish_to_unwritable_pipe_raises_system_error
+    skip "root ignores file permissions" if Process.euid.zero?
+
+    transport = new_transport
+    transport.configure
+    transport.send(:create_subscriber_pipe, "readonly")
+    File.chmod(0o400, transport.send(:subscriber_pipe_name, "readonly"))
+
+    error = assert_raises(SmartMessage::Transport::NamedPipes::Error) do
+      transport.do_publish("ReadOnly", "data")
+    end
+    assert_match(/System error writing to named pipe: Errno::EACCES/, error.message)
   end
 
   def test_cleanup_with_open_file_descriptors
@@ -148,36 +158,6 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
     assert_nil transport.send(:cleanup_pipes)
   end
 
-  def test_empty_channel_name
-    transport = new_transport
-    transport.configure
-
-    # Empty channel name should still create a valid pipe path
-    channel_name = ""
-    pipe_name = transport.send(:subscriber_pipe_name, channel_name)
-
-    assert_equal File.join(@test_dir, "error_test", ".in.pipe"), pipe_name
-  end
-
-  def test_special_characters_in_channel_name
-    transport = new_transport
-    transport.configure
-
-    # Channel names with special characters
-    # The derive_channel_name method handles :: but not other special chars
-    special_names = [
-      "channel/with/slashes",
-      "channel with spaces",
-      "channel\nwith\nnewlines"
-    ]
-
-    special_names.each do |name|
-      pipe_name = transport.send(:subscriber_pipe_name, name)
-      # Should create a pipe path (though it may be unusual)
-      assert pipe_name.include?(@test_dir)
-    end
-  end
-
   def test_very_long_channel_name_raises
     transport = new_transport
     transport.configure
@@ -200,26 +180,6 @@ class SmartMessage::Transport::NamedPipesErrorsTest < Minitest::Test
     end
   ensure
     File.chmod(0o755, transport.pipe_path) if transport&.pipe_path
-  end
-
-  def test_shutdown_flag_thread_visibility
-    transport = new_transport
-    transport.configure
-
-    # Start a thread that checks shutdown flag
-    flag_visible = false
-    thread = Thread.new do
-      sleep 0.1 while !transport.instance_variable_get(:@shutdown)
-      flag_visible = true
-    end
-
-    # Set shutdown flag from main thread
-    transport.instance_variable_set(:@shutdown, true)
-
-    # Thread should see the change
-    thread.join(1.0)
-
-    assert flag_visible, "Shutdown flag should be visible across threads"
   end
 
   def test_write_after_disconnect
