@@ -61,9 +61,15 @@ Before running examples, ensure you have:
 
 ## Troubleshooting
 
-**Issue**: "No subscriber pipe found" message
+**Issue**: Published messages never arrive, with no error
 
-**Solution**: Make sure the subscriber is started before the publisher
+**Solution**: Start the subscriber first and wait for it to subscribe (`basic_pubsub.rb` prints "Subscriber ready!") before running the publisher, and use the same `base_path`, `namespace`, and fully qualified message class name on both sides. A message published when no subscriber pipe exists at that path is dropped (see [How It Works](../README.md#how-it-works)). The "No subscriber pipe found" notice is logged at debug level, which the default SmartMessage logger does not show. To see it on the terminal, configure SmartMessage before creating the transport:
+```ruby
+SmartMessage.configure do |config|
+  config.logger    = STDOUT
+  config.log_level = :debug
+end
+```
 
 **Issue**: Permission denied errors
 

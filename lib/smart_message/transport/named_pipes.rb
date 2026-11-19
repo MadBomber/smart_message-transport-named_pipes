@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+# Load the whole framework: smart_message 0.1.0 autoloads through Zeitwerk,
+# and Base alone leaves SmartMessage::Dispatcher undefined.
+require 'smart_message'
 require 'smart_message/transport/base'
 require 'fileutils'
 require 'timeout'
@@ -27,14 +30,14 @@ module SmartMessage
     #
     # @see https://github.com/MadBomber/smart_message-transport-named_pipes
     class NamedPipes < Base
-      VERSION = "0.0.1"
+      require_relative "named_pipes/version"
 
       # Custom error class for NamedPipes transport errors
       class Error < StandardError; end
       
       DEFAULT_CONFIG = {
-        base_path: ENV['SMART_MESSAGE_PIPE_BASE'] || '/tmp/smart_message/pipes',
-        namespace: ENV['SMART_MESSAGE_NAMESPACE'] || 'default',
+        base_path: '/tmp/smart_message/pipes',
+        namespace: 'default',
         mode: :unidirectional,      # Recommended for avoiding deadlocks
         permissions: 0600,           # Owner read/write only
         cleanup: true,              # Delete pipes on shutdown
@@ -74,6 +77,7 @@ module SmartMessage
         @subscriber_pipes = {}
         @publisher_pipes = {}
         @pipe_readers = {}
+        @channel_classes = {}
         @shutdown = false
         @mutex = Mutex.new
 
@@ -83,7 +87,7 @@ module SmartMessage
 
       # Configure the transport by creating the pipe directory.
       #
-      # This method is called automatically by {#connect} if not already configured.
+      # This method is called automatically by {#connect}.
       #
       # @return [void]
       def configure
@@ -94,9 +98,15 @@ module SmartMessage
 
       # Return default configuration options.
       #
-      # @return [Hash] default options from DEFAULT_CONFIG
+      # SMART_MESSAGE_PIPE_BASE and SMART_MESSAGE_NAMESPACE are read at call
+      # time, so they take effect even when set after the gem is required.
+      #
+      # @return [Hash] default options from DEFAULT_CONFIG and the environment
       def default_options
-        DEFAULT_CONFIG
+        DEFAULT_CONFIG.merge(
+          base_path: ENV.fetch('SMART_MESSAGE_PIPE_BASE', DEFAULT_CONFIG[:base_path]),
+          namespace: ENV.fetch('SMART_MESSAGE_NAMESPACE', DEFAULT_CONFIG[:namespace])
+        )
       end
 
       # Publish a message to the transport.
@@ -109,7 +119,7 @@ module SmartMessage
         channel_name = derive_channel_name(message_class)
         pipe_name = subscriber_pipe_name(channel_name)
 
-        unless File.exist?(pipe_name)
+        unless File.pipe?(pipe_name)
           logger.debug { "[NamedPipes] No subscriber pipe found for #{channel_name} at #{pipe_name}, message dropped" }
           return
         end
@@ -130,14 +140,21 @@ module SmartMessage
       # @param process_method [Method, Proc] the method/proc to call when a message is received
       # @param filter_options [Hash] optional filter options (passed to parent)
       # @return [void]
+      # @raise [Error] if the transport is disconnected
+      # @raise [Error] if another message class already uses the same channel
       def subscribe(message_class, process_method, filter_options = {})
-        super(message_class, process_method, filter_options)
+        raise Error, "transport is disconnected; call #connect first" if @shutdown
 
         channel_name = derive_channel_name(message_class)
+        bind_channel(channel_name, message_class)
+
+        super(message_class, process_method, filter_options)
+
         create_subscriber_pipe(channel_name)
 
-        # Thread-safe check to avoid starting duplicate readers
-        needs_reader = @mutex.synchronize { !@pipe_readers.key?(channel_name) }
+        # Thread-safe check to avoid starting duplicate readers; a reader that
+        # exited during a disconnect is replaced.
+        needs_reader = @mutex.synchronize { !@pipe_readers[channel_name]&.alive? }
         start_pipe_reader(channel_name, message_class) if needs_reader
       end
 
@@ -151,13 +168,18 @@ module SmartMessage
       # @return [void]
       def unsubscribe(message_class, process_method)
         super(message_class, process_method)
-        
-        channel_name = derive_channel_name(message_class)
-        # Only remove pipe if no more subscribers for this message class
-        if @dispatcher.subscribers[message_class].empty?
-          stop_pipe_reader(channel_name)
-          remove_subscriber_pipe(channel_name)
-        end
+        release_channel(message_class) unless subscribers?(message_class)
+      end
+
+      # Unsubscribe every handler for a message class.
+      #
+      # Stops the reader thread and removes the subscriber pipe.
+      #
+      # @param message_class [Class] the message class to unsubscribe from
+      # @return [void]
+      def unsubscribe!(message_class)
+        super(message_class)
+        release_channel(message_class)
       end
 
       # Check if the transport is currently connected.
@@ -169,11 +191,13 @@ module SmartMessage
 
       # Connect the transport.
       #
-      # Configures the pipe directory if not already done.
+      # Clears the shutdown flag and (re)creates the pipe directory, so the
+      # transport can be connected again after {#disconnect}.
       #
       # @return [void]
       def connect
-        configure unless @pipe_path
+        @shutdown = false
+        configure
         logger.info { "[NamedPipes] Transport connected" }
       end
 
@@ -194,6 +218,32 @@ module SmartMessage
 
       private
 
+      # The dispatcher keys subscribers by String(message_class). Use fetch so the
+      # lookup doesn't trigger the Hash default block and add an empty entry.
+      def subscribers?(message_class)
+        handlers = @dispatcher.subscribers.fetch(String(message_class), nil)
+        !(handlers.nil? || handlers.empty?)
+      end
+
+      def release_channel(message_class)
+        channel_name = derive_channel_name(message_class)
+        stop_pipe_reader(channel_name)
+        remove_subscriber_pipe(channel_name)
+        @mutex.synchronize { @channel_classes.delete(channel_name) }
+      end
+
+      # derive_channel_name is lossy (case and "::" vs "_"), so two classes can
+      # map to one pipe. Its reader dispatches every message as the first
+      # class, so refuse a second class instead of misrouting silently.
+      def bind_channel(channel_name, message_class)
+        class_name = String(message_class)
+        bound = @mutex.synchronize { @channel_classes[channel_name] ||= class_name }
+        return if bound == class_name
+
+        raise Error, "channel #{channel_name.inspect} is already bound to #{bound}; " \
+                     "#{class_name} maps to the same named pipe"
+      end
+
       def derive_channel_name(message_class)
         message_class.to_s.gsub('::', '_').downcase
       end
@@ -202,15 +252,15 @@ module SmartMessage
         File.join(@pipe_path, "#{channel_name}.in.pipe")
       end
 
-      def publisher_pipe_name(channel_name)
-        File.join(@pipe_path, "#{channel_name}.out.pipe")
-      end
-
       def create_subscriber_pipe(channel_name)
         pipe_name = subscriber_pipe_name(channel_name)
-        return if File.exist?(pipe_name)
+        return if File.pipe?(pipe_name)
+        if File.exist?(pipe_name)
+          raise Error, "Failed to create named pipe: #{pipe_name} exists and is not a FIFO"
+        end
 
         begin
+          FileUtils.mkdir_p(@pipe_path, mode: 0755)
           system("mkfifo", pipe_name)
           File.chmod(@options[:permissions], pipe_name)
           @mutex.synchronize { @subscriber_pipes[channel_name] = pipe_name }
@@ -236,16 +286,24 @@ module SmartMessage
           Thread.current.name = "NamedPipes-#{channel_name}"
           
           begin
-            while !@shutdown
-              # Open pipe in non-blocking mode to avoid hanging
+            while !@shutdown && !Thread.current.thread_variable_get(:stop)
               begin
-                File.open(pipe_name, 'r') do |pipe|
-                  while !@shutdown && !pipe.eof?
+                # Open read-write so this reader also holds a write end: the
+                # FIFO never reaches EOF between publishers, so a writer can't
+                # hit a closed pipe (EPIPE) or have its data discarded while
+                # the reader would otherwise be closing and reopening.
+                File.open(pipe_name, 'r+') do |pipe|
+                  while !@shutdown && !Thread.current.thread_variable_get(:stop)
                     if IO.select([pipe], nil, nil, 0.1) # 100ms timeout
                       data = pipe.gets
                       if data && !data.strip.empty?
                         logger.debug { "[NamedPipes] Received #{data.bytesize} bytes on #{channel_name}" }
-                        receive(message_class.to_s, data.strip)
+                        begin
+                          receive(message_class.to_s, data.strip)
+                        rescue => e
+                          # Skip only this message; keep reading the rest of the buffer
+                          logger.error { "[NamedPipes] Error processing message on #{channel_name}: #{e.class} - #{e.message}" }
+                        end
                       end
                     end
                   end
@@ -277,20 +335,20 @@ module SmartMessage
 
       def stop_pipe_reader(channel_name)
         reader_thread = @mutex.synchronize { @pipe_readers.delete(channel_name) }
-        if reader_thread && reader_thread.alive?
-          # Signal shutdown and wait for thread to exit gracefully
-          # Thread will exit on next @shutdown check in loop
-          reader_thread.join(2.0) # Wait up to 2 seconds
-          # If still alive, force termination
-          reader_thread.kill if reader_thread.alive?
-        end
+        return unless reader_thread&.alive?
+
+        reader_thread.thread_variable_set(:stop, true)
+        reader_thread.join(2.0)
+        reader_thread.kill if reader_thread.alive?
       end
 
       def write_to_pipe(pipe_name, data)
         begin
           # Use timeout to prevent hanging on blocked pipes
           Timeout.timeout(@options[:timeout]) do
-            File.open(pipe_name, 'w') do |pipe|
+            # WRONLY without CREAT: a missing pipe raises ENOENT instead of
+            # leaving a regular file at the pipe path.
+            File.open(pipe_name, File::WRONLY) do |pipe|
               pipe.puts(data)
               pipe.flush
             end
@@ -304,6 +362,8 @@ module SmartMessage
         rescue Errno::ENXIO => e
           logger.warn { "[NamedPipes] No reader for pipe #{pipe_name}" }
           # Don't raise - pipe exists but no reader yet
+        rescue Errno::ENOENT
+          logger.debug { "[NamedPipes] Subscriber pipe #{pipe_name} was removed, message dropped" }
         rescue SystemCallError => e
           logger.error { "[NamedPipes] System error writing to pipe #{pipe_name}: #{e.class} - #{e.message}" }
           raise Error, "System error writing to named pipe: #{e.class} - #{e.message}"
@@ -314,11 +374,11 @@ module SmartMessage
       end
 
       def cleanup_pipes
-        return unless @options[:cleanup]
-
-        # Stop all reader threads
+        # Stop all reader threads; :cleanup only governs removal of pipes
         channel_names = @mutex.synchronize { @pipe_readers.keys.dup }
         channel_names.each { |channel_name| stop_pipe_reader(channel_name) }
+
+        return unless @options[:cleanup]
 
         # Remove all subscriber pipes
         pipes_to_remove = @mutex.synchronize { @subscriber_pipes.values.dup }
@@ -335,14 +395,9 @@ module SmartMessage
           @subscriber_pipes.clear
           @publisher_pipes.clear
         end
-        
-        # Remove pipe directory if empty
-        begin
-          Dir.rmdir(@pipe_path) if @pipe_path && File.directory?(@pipe_path) && Dir.empty?(@pipe_path)
-        rescue => e
-          logger.debug { "[NamedPipes] Could not remove pipe directory: #{e.message}" }
-        end
-        
+
+        # The namespace directory is left in place: other transports sharing
+        # this base_path/namespace may still be using it.
         logger.debug { "[NamedPipes] Pipe cleanup completed" }
       end
 
@@ -354,13 +409,16 @@ module SmartMessage
 
       def setup_signal_handlers
         %w[INT TERM].each do |signal|
-          Signal.trap(signal) do
-            @shutdown = true
-            notify_shutdown
-            cleanup_pipes
-            exit(0)
-          end
+          Signal.trap(signal) { handle_shutdown_signal }
         end
+      end
+
+      # Runs in trap context, where Mutex#synchronize raises ThreadError, so
+      # only set the flag and exit. The at_exit hook registered in #initialize
+      # stops the readers and removes the pipes outside trap context.
+      def handle_shutdown_signal
+        @shutdown = true
+        exit(0)
       end
     end
   end

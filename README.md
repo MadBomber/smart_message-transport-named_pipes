@@ -10,7 +10,7 @@ A Unix named pipes (FIFO) transport layer for the SmartMessage messaging system.
 - **Configurable**: Flexible configuration options for permissions, timeouts, and paths
 - **Namespace Support**: Isolate different applications using namespace configuration
 - **Comprehensive Error Handling**: Detailed logging and error reporting
-- **Zero External Dependencies**: Uses only Ruby standard library
+- **Minimal Dependencies**: Only the `smart_message` framework it extends; the transport itself uses just the Ruby standard library
 
 ## Installation
 
@@ -34,10 +34,10 @@ gem install smart_message-transport-named_pipes
 
 ## Requirements
 
-- Ruby >= 3.2.0
+- Ruby >= 4.0
 - Unix-like operating system (Linux, macOS, BSD)
 - `mkfifo` command available (standard on all Unix systems)
-- `smart_message` gem
+- `smart_message` gem >= 0.1.0 (not yet on RubyGems; see [#6](https://github.com/MadBomber/smart_message-transport-named_pipes/issues/6))
 
 **Note**: Named pipes (FIFOs) are a Unix-specific feature. This transport will not work on Windows.
 
@@ -147,9 +147,12 @@ transport.disconnect
 
 2. **Channel Derivation**: Message class names are converted to channel names:
    - `OrderCreated` → `ordercreated`
-   - `MyApp::Events::UserSignedUp` → `myapp_events_signedup`
+   - `MyApp::Events::UserSignedUp` → `myapp_events_usersignedup`
+   - The mapping is lossy, so classes that differ only by case or by `::` versus `_` (for example `Billing::Event` and `Billing_Event`) map to the same pipe. Subscribing to a second such class on the same transport raises `SmartMessage::Transport::NamedPipes::Error` rather than delivering its messages as the first class.
 
 3. **Publishing**: Opens the named pipe for writing and sends serialized message data
+   - If no subscriber has created the pipe yet, the message is dropped and only a debug-level log line records it, so start subscribers before publishers.
+   - If the pipe exists but nothing is reading it, the write waits up to `timeout` seconds and then raises: `SmartMessage::Transport::NamedPipes::Error` when you call `transport.publish` directly, or `SmartMessage::Errors::PublishError` when you call `message.publish` through the framework (see [Pipe Timeout Errors](#pipe-timeout-errors)).
 
 4. **Subscribing**: Creates a background thread that continuously reads from the named pipe
 
@@ -158,7 +161,8 @@ transport.disconnect
 ### Thread Model
 
 - One reader thread per subscribed channel
-- Non-blocking I/O with timeouts to prevent hangs
+- Readers poll their pipe every 100 ms with `IO.select`, then read with a blocking `gets`
+- Writes are blocking, bounded by `timeout`: a publish to a pipe with no reader blocks for up to `timeout` seconds (5 s by default) before it raises
 - Graceful shutdown with thread join and cleanup
 
 ### Named Pipe Layout
@@ -245,6 +249,15 @@ Named pipes are extremely fast for IPC on the same machine:
 
 **Error**: `Timeout writing to named pipe after N seconds`
 
+Which exception you get depends on how you publish:
+
+| How you publish | What raises | Dead-lettered? |
+|---|---|---|
+| `transport.publish(msg)` directly | `SmartMessage::Transport::NamedPipes::Error` | no |
+| `msg.publish` through the framework | `SmartMessage::Errors::PublishError` (message: `All transports failed for …: NamedPipes: Timeout writing to named pipe after N seconds`) | yes, written to the dead-letter queue |
+
+`SmartMessage::Errors::PublishError` is not a subclass of `NamedPipes::Error` and carries no `cause`, so `rescue SmartMessage::Transport::NamedPipes::Error` around `msg.publish` never catches it. Rescue `SmartMessage::Errors::PublishError` there instead.
+
 **Cause**: No subscriber is reading from the pipe
 
 **Solution**:
@@ -296,7 +309,7 @@ transport.subscribe(MyMessage, method(:handler))
 | Network | No | Yes | Yes | Yes |
 | Persistence | No | No | Optional | Yes |
 | Setup Complexity | Minimal | Low | Medium | High |
-| External Dependencies | None | None | Redis | RabbitMQ |
+| External Dependencies | smart_message | None | Redis | RabbitMQ |
 
 **Use Named Pipes when**:
 - All processes run on the same machine
@@ -316,14 +329,21 @@ After checking out the repo, run `bundle install` to install dependencies.
 
 ### Running Tests
 
+`rake` and `minitest` ship with Ruby; the Rakefile also loads RuboCop's rake task. Run plain `rake test`, not `bundle exec rake test`, because Bundler can't resolve `smart_message` yet ([#6](https://github.com/MadBomber/smart_message-transport-named_pipes/issues/6)).
+
 ```bash
 # Run all tests
-ruby -Ilib:test test/smart_message/transport/test_named_pipes.rb
-ruby -Ilib:test test/smart_message/transport/test_named_pipes_integration.rb
-ruby -Ilib:test test/smart_message/transport/test_named_pipes_errors.rb
-
-# Or using rake (if available)
+gem install rubocop
 rake test
+```
+
+Or run each test file directly, as CI does:
+
+```bash
+for f in test/smart_message/transport/*_test.rb; do
+  echo "== $f =="
+  ruby -Itest -Ilib "$f"
+done
 ```
 
 ### Code Style
@@ -349,11 +369,12 @@ The gem is available as open source under the terms of the [MIT License](https:/
 
 ## Related Projects
 
-- [smart_message](https://github.com/MadBomber/smart_message) - Core messaging framework
-- Other SmartMessage transports:
-  - `smart_message-transport-tcp` - TCP/IP transport
-  - `smart_message-transport-redis` - Redis pub/sub transport
-  - `smart_message-transport-http` - HTTP/webhook transport
+- [smart_message](https://github.com/MadBomber/smart_message) - Core messaging framework. As of [0.1.0](https://github.com/MadBomber/smart_message/tree/2aa3dbf) it ships `:memory`, `:stdout`, `:file`, and `:redis` transports built in.
+- Other SmartMessage transports (GitHub repositories, not yet published on RubyGems):
+  - [smart_message-transport-lanet](https://github.com/MadBomber/smart_message-transport-lanet) - LAN peer-to-peer transport using Lanet
+  - [smart_message-transport-email](https://github.com/MadBomber/smart_message-transport-email) - Email (SMTP/IMAP) transport
+  - [smart_message-transport-rabbitmq](https://github.com/MadBomber/smart_message-transport-rabbitmq) - RabbitMQ transport
+  - [smart_message-transport-nats](https://github.com/MadBomber/smart_message-transport-nats) - NATS transport
 
 ## Support
 

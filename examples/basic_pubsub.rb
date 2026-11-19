@@ -30,20 +30,20 @@ def create_transport
   )
 end
 
+# Define message handler
+def handle_greeting(message)
+  puts "\n📨 Received greeting:"
+  puts "  From: #{message.name}"
+  puts "  Message: #{message.greeting}"
+  puts "  Time: #{message.timestamp}"
+end
+
 # Subscriber process
 def run_subscriber
   puts "Starting subscriber..."
 
   transport = create_transport
   transport.connect
-
-  # Define message handler
-  def handle_greeting(message)
-    puts "\n📨 Received greeting:"
-    puts "  From: #{message.name}"
-    puts "  Message: #{message.greeting}"
-    puts "  Time: #{message.timestamp}"
-  end
 
   # Subscribe to GreetingMessage
   transport.subscribe(GreetingMessage, method(:handle_greeting))

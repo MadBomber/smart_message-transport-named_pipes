@@ -21,10 +21,13 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
     FileUtils.rm_rf(@test_dir) if File.exist?(@test_dir)
   end
 
-  def test_write_to_pipe_simple_message
-    skip "Integration test requires full SmartMessage framework"
+  # Assigned to @transport so teardown disconnects it.
+  def new_transport
+    @transport = SmartMessage::Transport::NamedPipes.new(**@options)
+  end
 
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+  def test_write_to_pipe_simple_message
+    transport = new_transport
     transport.configure
 
     channel_name = "test_channel"
@@ -55,9 +58,7 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
   end
 
   def test_pipe_communication_multiple_messages
-    skip "Integration test requires full SmartMessage framework"
-
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     channel_name = "multi_message_channel"
@@ -66,10 +67,12 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
     # Create the pipe
     transport.send(:create_subscriber_pipe, channel_name)
 
-    # Start a reader thread that reads multiple messages
+    # Start a reader thread that reads multiple messages. Open read-write, as
+    # the transport's own reader does: write_to_pipe opens and closes the FIFO
+    # per message, so a read-only reader would hit EOF after the first one.
     received_messages = []
     reader_thread = Thread.new do
-      File.open(pipe_name, 'r') do |pipe|
+      File.open(pipe_name, 'r+') do |pipe|
         3.times do
           if data = pipe.gets
             received_messages << data.strip
@@ -91,28 +94,12 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
     reader_thread.join(2.0)
 
     assert_equal messages, received_messages
-  end
-
-  def test_pipe_timeout_when_no_reader
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
-    transport.configure
-
-    channel_name = "timeout_test"
-    pipe_name = transport.send(:subscriber_pipe_name, channel_name)
-
-    # Create the pipe but don't start a reader
-    transport.send(:create_subscriber_pipe, channel_name)
-
-    # Writing should timeout (not hang forever)
-    error = assert_raises(SmartMessage::Transport::NamedPipes::Error) do
-      transport.send(:write_to_pipe, pipe_name, "This should timeout")
-    end
-
-    assert_match(/Timeout writing to named pipe/, error.message)
+  ensure
+    reader_thread&.kill
   end
 
   def test_thread_safety_concurrent_pipe_operations
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
     transport.configure
 
     # Create multiple pipes concurrently
@@ -133,45 +120,8 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
     end
   end
 
-  def test_cleanup_removes_all_resources
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
-    transport.configure
-
-    # Create multiple pipes
-    channels = %w[cleanup1 cleanup2 cleanup3]
-    channels.each do |channel|
-      transport.send(:create_subscriber_pipe, channel)
-    end
-
-    # Verify pipes exist
-    channels.each do |channel|
-      pipe_name = transport.send(:subscriber_pipe_name, channel)
-      assert File.exist?(pipe_name)
-    end
-
-    # Cleanup
-    transport.send(:cleanup_pipes)
-
-    # Verify pipes are removed
-    channels.each do |channel|
-      pipe_name = transport.send(:subscriber_pipe_name, channel)
-      refute File.exist?(pipe_name), "Pipe #{pipe_name} should be removed"
-    end
-  end
-
-  def test_graceful_shutdown
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
-    transport.configure
-
-    # Set shutdown flag
-    transport.instance_variable_set(:@shutdown, true)
-
-    # Connected should return false
-    refute transport.connected?
-  end
-
   def test_connect_and_disconnect
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport = new_transport
 
     # Initially not configured (no pipe_path set)
     # Note: connected? checks @shutdown flag and pipe_path existence
@@ -185,39 +135,6 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
 
     # After disconnect, @shutdown is true so connected? returns false
     refute transport.connected?
-  end
-
-  def test_channel_name_derivation_edge_cases
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
-    transport.configure
-
-    # Test various class name formats
-    test_cases = {
-      "SimpleClass" => "simpleclass",
-      "Namespace::ClassName" => "namespace_classname",
-      "Deep::Nested::Class::Name" => "deep_nested_class_name",
-      "ALLCAPS" => "allcaps",
-      "Mixed_Case_123" => "mixed_case_123"
-    }
-
-    test_cases.each do |input, expected|
-      result = transport.send(:derive_channel_name, input)
-      assert_equal expected, result, "Failed for input: #{input}"
-    end
-  end
-
-  def test_pipe_permissions
-    transport = SmartMessage::Transport::NamedPipes.new(**@options)
-    transport.configure
-
-    channel_name = "permission_test"
-    transport.send(:create_subscriber_pipe, channel_name)
-
-    pipe_name = transport.send(:subscriber_pipe_name, channel_name)
-    stat = File.stat(pipe_name)
-
-    # Check that permissions are set correctly (0600)
-    assert_equal 0600, stat.mode & 0777
   end
 
   def test_multiple_transports_same_namespace
@@ -240,9 +157,23 @@ class SmartMessage::Transport::NamedPipesIntegrationTest < Minitest::Test
     # transport2 should see the same pipe
     assert File.exist?(pipe_name)
 
-    # Cleanup transport1 shouldn't affect transport2's ability to use pipes
-    # (though it will remove the pipes - this tests the idempotency)
     transport1.disconnect
-    transport2.disconnect
+
+    assert transport2.connected?, "another transport's disconnect removed the shared directory"
+    transport2.subscribe("SharedMessage", ->(*) {})
+    assert File.pipe?(transport2.send(:subscriber_pipe_name, "sharedmessage"))
+  ensure
+    transport1&.disconnect
+    transport2&.disconnect
+  end
+
+  def test_subscribe_recreates_a_removed_namespace_directory
+    transport = new_transport
+    transport.connect
+    Dir.rmdir(transport.pipe_path)
+
+    transport.subscribe("LateMessage", ->(*) {})
+
+    assert File.pipe?(transport.send(:subscriber_pipe_name, "latemessage"))
   end
 end

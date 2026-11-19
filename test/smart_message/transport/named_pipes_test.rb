@@ -38,24 +38,17 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     assert_equal 5.0, config[:timeout]
   end
 
-  def test_default_base_path_from_env
-    # DEFAULT_CONFIG is frozen and evaluated at load time, so we test
-    # that the environment variable support is present in the constant definition
-    config = SmartMessage::Transport::NamedPipes::DEFAULT_CONFIG
+  def test_env_vars_set_after_require_are_used
+    original = ENV.values_at("SMART_MESSAGE_PIPE_BASE", "SMART_MESSAGE_NAMESPACE")
+    ENV["SMART_MESSAGE_PIPE_BASE"] = @test_dir
+    ENV["SMART_MESSAGE_NAMESPACE"] = "from_env"
 
-    # Verify that base_path has a default value
-    assert config[:base_path].is_a?(String)
-    refute config[:base_path].empty?
-  end
+    transport = SmartMessage::Transport::NamedPipes.new
 
-  def test_default_namespace_from_env
-    # DEFAULT_CONFIG is frozen and evaluated at load time, so we test
-    # that the environment variable support is present in the constant definition
-    config = SmartMessage::Transport::NamedPipes::DEFAULT_CONFIG
-
-    # Verify that namespace has a default value
-    assert config[:namespace].is_a?(String)
-    refute config[:namespace].empty?
+    assert_equal @test_dir, transport.options[:base_path]
+    assert_equal "from_env", transport.options[:namespace]
+  ensure
+    ENV["SMART_MESSAGE_PIPE_BASE"], ENV["SMART_MESSAGE_NAMESPACE"] = original
   end
 
   def test_initialization_creates_required_structures
@@ -92,16 +85,106 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     refute transport.connected?
   end
 
+  def test_connect_after_disconnect_restores_transport
+    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport.connect
+    transport.disconnect
+    transport.connect
+
+    assert transport.connected?
+
+    transport.subscribe("ReconnectMessage", ->(*) {})
+    assert File.pipe?(transport.send(:subscriber_pipe_name, "reconnectmessage"))
+  ensure
+    transport&.disconnect
+  end
+
+  def test_subscribe_after_disconnect_raises
+    transport = SmartMessage::Transport::NamedPipes.new(**@options, cleanup: false)
+    transport.connect
+    transport.disconnect
+
+    error = assert_raises(SmartMessage::Transport::NamedPipes::Error) do
+      transport.subscribe("LateMessage", ->(*) {})
+    end
+    assert_match(/disconnected; call #connect first/, error.message)
+    assert_empty transport.instance_variable_get(:@pipe_readers)
+    refute File.exist?(transport.send(:subscriber_pipe_name, "latemessage"))
+  end
+
+  def test_subscribe_after_reconnect_replaces_dead_reader
+    transport = SmartMessage::Transport::NamedPipes.new(**@options, cleanup: false)
+    transport.connect
+    dead_reader = Thread.new {}.tap(&:join)
+    transport.instance_variable_get(:@pipe_readers)["reconnectmessage"] = dead_reader
+
+    transport.subscribe("ReconnectMessage", ->(*) {})
+
+    assert transport.instance_variable_get(:@pipe_readers)["reconnectmessage"].alive?
+  ensure
+    transport&.disconnect
+    transport&.instance_variable_get(:@pipe_readers)&.each_value(&:kill)
+  end
+
+  def test_disconnect_stops_idle_readers_promptly
+    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport.connect
+    %w[FastA FastB FastC].each { |name| transport.subscribe(name, ->(*) {}) }
+    readers = transport.instance_variable_get(:@pipe_readers).values
+    sleep 0.2 # let the readers become idle
+
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    transport.disconnect
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+
+    assert_operator elapsed, :<, 1.0
+    assert readers.none?(&:alive?)
+  end
+
+  def test_unsubscribe_stops_idle_reader_promptly
+    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport.connect
+    handler = ->(*) {}
+    transport.subscribe("FastA", handler)
+    reader = transport.instance_variable_get(:@pipe_readers)["fasta"]
+    sleep 0.2
+
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    transport.unsubscribe("FastA", handler)
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+
+    assert_operator elapsed, :<, 1.0
+    refute reader.alive?
+  ensure
+    transport&.disconnect
+  end
+
+  def test_disconnect_without_cleanup_stops_readers_but_keeps_pipes
+    transport = SmartMessage::Transport::NamedPipes.new(**@options, cleanup: false)
+    transport.connect
+    transport.subscribe("KeepMessage", ->(*) {})
+    reader = transport.instance_variable_get(:@pipe_readers)["keepmessage"]
+
+    transport.disconnect
+
+    refute reader.alive?, "reader left running after disconnect"
+    assert File.pipe?(transport.send(:subscriber_pipe_name, "keepmessage"))
+  ensure
+    reader&.kill
+  end
+
   def test_derive_channel_name
     transport = create_mock_transport
 
-    # Test with simple class name
-    channel = transport.send(:derive_channel_name, "TestMessage")
-    assert_equal "testmessage", channel
-
-    # Test with namespaced class name
-    channel = transport.send(:derive_channel_name, "Foo::Bar::TestMessage")
-    assert_equal "foo_bar_testmessage", channel
+    {
+      "TestMessage" => "testmessage",
+      "Foo::Bar::TestMessage" => "foo_bar_testmessage",
+      "Deep::Nested::Class::Name" => "deep_nested_class_name",
+      "ALLCAPS" => "allcaps",
+      "Mixed_Case_123" => "mixed_case_123"
+    }.each do |input, expected|
+      assert_equal expected, transport.send(:derive_channel_name, input), "Failed for input: #{input}"
+    end
   end
 
   def test_subscriber_pipe_name_format
@@ -110,15 +193,6 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
 
     pipe_name = transport.send(:subscriber_pipe_name, "test_channel")
     expected = File.join(@test_dir, "test", "test_channel.in.pipe")
-    assert_equal expected, pipe_name
-  end
-
-  def test_publisher_pipe_name_format
-    transport = create_mock_transport
-    transport.configure
-
-    pipe_name = transport.send(:publisher_pipe_name, "test_channel")
-    expected = File.join(@test_dir, "test", "test_channel.out.pipe")
     assert_equal expected, pipe_name
   end
 
@@ -152,6 +226,40 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
 
     pipe_name = transport.send(:subscriber_pipe_name, channel_name)
     assert File.exist?(pipe_name)
+  end
+
+  def test_create_subscriber_pipe_refuses_a_regular_file
+    transport = create_mock_transport
+    transport.configure
+
+    pipe_name = transport.send(:subscriber_pipe_name, "test_channel")
+    File.write(pipe_name, "")
+
+    assert_raises(SmartMessage::Transport::NamedPipes::Error) do
+      transport.send(:create_subscriber_pipe, "test_channel")
+    end
+    refute transport.subscriber_pipes.key?("test_channel")
+  end
+
+  def test_write_to_missing_pipe_does_not_create_a_file
+    transport = create_mock_transport
+    transport.configure
+
+    pipe_name = transport.send(:subscriber_pipe_name, "gone_channel")
+    transport.send(:write_to_pipe, pipe_name, "data")
+
+    refute File.exist?(pipe_name), "write_to_pipe must not create a regular file at the pipe path"
+  end
+
+  def test_publish_skips_a_path_that_is_not_a_fifo
+    transport = create_mock_transport
+    transport.configure
+
+    pipe_name = transport.send(:subscriber_pipe_name, "plainfile")
+    File.write(pipe_name, "untouched\n")
+
+    assert_nil transport.do_publish("PlainFile", "data")
+    assert_equal "untouched\n", File.read(pipe_name)
   end
 
   def test_remove_subscriber_pipe
@@ -197,13 +305,124 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
 
     transport.send(:cleanup_pipes)
 
-    # Pipe should still exist because cleanup is false
-    # Note: This test might need adjustment based on actual behavior
-    # For now, we just verify the method doesn't crash
-    assert true
+    assert File.pipe?(pipe_name), "cleanup: false must leave the pipe in place"
+  end
+
+  ProbeMessage = Class.new
+
+  def test_unsubscribe_keeps_pipe_while_other_handlers_remain
+    @transport = subscribed_probe_transport
+    @transport.unsubscribe(ProbeMessage, "Probe.first")
+
+    assert File.exist?(probe_pipe_name), "pipe removed while a handler is still subscribed"
+    assert probe_reader?, "reader stopped while a handler is still subscribed"
+  ensure
+    @transport&.disconnect
+  end
+
+  def test_unsubscribe_removes_pipe_after_last_handler
+    @transport = subscribed_probe_transport
+    @transport.unsubscribe(ProbeMessage, "Probe.first")
+    @transport.unsubscribe(ProbeMessage, "Probe.second")
+
+    refute File.exist?(probe_pipe_name), "pipe left behind after the last handler unsubscribed"
+    refute probe_reader?, "reader left running after the last handler unsubscribed"
+    refute @transport.dispatcher.subscribers.key?(ProbeMessage), "lookup added a Class-keyed entry"
+  ensure
+    @transport&.disconnect
+  end
+
+  def test_unsubscribe_bang_removes_pipe_and_reader
+    @transport = subscribed_probe_transport
+    @transport.unsubscribe!(ProbeMessage)
+
+    refute File.exist?(probe_pipe_name), "pipe left behind after unsubscribe!"
+    refute probe_reader?, "reader left running after unsubscribe!"
+  ensure
+    @transport&.disconnect
+  end
+
+  def test_subscribe_rejects_a_class_whose_channel_is_bound_to_another
+    @transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    @transport.connect
+    @transport.subscribe("Billing::Event", "Probe.first")
+
+    error = assert_raises(SmartMessage::Transport::NamedPipes::Error) do
+      @transport.subscribe("Billing_Event", "Probe.second")
+    end
+    assert_match(/already bound to Billing::Event/, error.message)
+    refute @transport.dispatcher.subscribers.key?("Billing_Event"), "rejected class was still subscribed"
+
+    @transport.subscribe("Billing::Event", "Probe.second")
+    @transport.unsubscribe!("Billing::Event")
+    @transport.subscribe("Billing_Event", "Probe.second")
+    assert File.pipe?(@transport.send(:subscriber_pipe_name, "billing_event"))
+  ensure
+    @transport&.disconnect
+  end
+
+  def test_subscribers_predicate_treats_missing_or_empty_as_none
+    transport = create_mock_transport
+    dispatcher = SmartMessage::Transport::Base::Dispatcher.new
+    transport.instance_variable_set(:@dispatcher, dispatcher)
+
+    refute transport.send(:subscribers?, ProbeMessage)
+    refute dispatcher.subscribers.key?(ProbeMessage.to_s), "lookup added an entry"
+
+    dispatcher.add(ProbeMessage, "Probe.first")
+    assert transport.send(:subscribers?, ProbeMessage)
+
+    dispatcher.drop(ProbeMessage, "Probe.first")
+    refute transport.send(:subscribers?, ProbeMessage)
+  end
+
+  def test_burst_of_publishes_loses_no_messages
+    @transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    received = Queue.new
+    @transport.define_singleton_method(:receive) { |_klass, data| received << data }
+    @transport.connect
+    @transport.subscribe(ProbeMessage, "Probe.first")
+
+    count = 2000
+    count.times { |i| @transport.do_publish(ProbeMessage, "msg#{i}") }
+
+    got = Array.new(count) { received.pop(timeout: 2) }
+    assert_equal count, got.compact.uniq.size
+  ensure
+    @transport&.disconnect
+  end
+
+  def test_failing_receive_skips_only_its_own_message
+    @transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    received = Queue.new
+    @transport.define_singleton_method(:receive) do |_klass, data|
+      received << data
+      raise "bad line" if data == "bad"
+    end
+    @transport.connect
+    @transport.subscribe(ProbeMessage, "Probe.first")
+
+    @transport.send(:write_to_pipe, probe_pipe_name, "bad\ngood1\ngood2")
+
+    got = Array.new(3) { received.pop(timeout: 2) }
+    assert_equal %w[bad good1 good2], got
+  ensure
+    @transport&.disconnect
   end
 
   private
+
+  def subscribed_probe_transport
+    transport = SmartMessage::Transport::NamedPipes.new(**@options)
+    transport.connect
+    transport.subscribe(ProbeMessage, "Probe.first")
+    transport.subscribe(ProbeMessage, "Probe.second")
+    transport
+  end
+
+  def probe_channel = @transport.send(:derive_channel_name, ProbeMessage)
+  def probe_pipe_name = @transport.send(:subscriber_pipe_name, probe_channel)
+  def probe_reader? = @transport.instance_variable_get(:@pipe_readers).key?(probe_channel)
 
   def create_mock_transport(options = nil)
     options ||= @options
@@ -217,13 +436,7 @@ class SmartMessage::Transport::NamedPipesTest < Minitest::Test
     transport.instance_variable_set(:@shutdown, false)
     transport.instance_variable_set(:@mutex, Mutex.new)
 
-    # Mock logger
-    logger = Object.new
-    def logger.debug(&block); end
-    def logger.info(&block); end
-    def logger.warn(&block); end
-    def logger.error(&block); end
-    transport.instance_variable_set(:@logger, logger)
+    transport.instance_variable_set(:@logger, SmartMessage::Transport::Base::Logger.new)
 
     transport
   end

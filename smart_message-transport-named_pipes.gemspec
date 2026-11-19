@@ -2,7 +2,10 @@
 
 Gem::Specification.new do |spec|
   spec.name = "smart_message-transport-named_pipes"
-  spec.version = "0.0.1"
+  # Read VERSION as text: requiring version.rb would open NamedPipes without
+  # its Base superclass and break the later `class NamedPipes < Base`.
+  version_rb = File.read(File.expand_path("lib/smart_message/transport/named_pipes/version.rb", __dir__))
+  spec.version = version_rb[/VERSION\s*=\s*["']([^"']+)["']/, 1]
   spec.authors = ["Dewayne VanHoozer"]
   spec.email = ["dewayne@vanhoozer.me"]
 
@@ -10,24 +13,28 @@ Gem::Specification.new do |spec|
   spec.description = "Provides Unix named pipes (FIFO) based transport for the SmartMessage pub/sub messaging system, enabling fast IPC communication between processes on the same machine."
   spec.homepage = "https://github.com/MadBomber/smart_message-transport-named_pipes"
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.2.0"
+  spec.required_ruby_version = ">= 4.0"
 
   spec.metadata["allowed_push_host"] = "https://rubygems.org"
-  spec.metadata["homepage_uri"] = spec.homepage
-  spec.metadata["source_code_uri"] = "https://github.com/MadBomber/smart_message-transport-named_pipes"
-    spec.metadata["changelog_uri"] = "https://github.com/MadBomber/smart_message-transport-named_pipes/blob/main/CHANGELOG.md"
+  spec.metadata["source_code_uri"] = spec.homepage
+  spec.metadata["changelog_uri"] = "#{spec.homepage}/blob/main/CHANGELOG.md"
+  spec.metadata["bug_tracker_uri"] = "#{spec.homepage}/issues"
+  spec.metadata["documentation_uri"] = "#{spec.homepage}/blob/main/README.md"
+  spec.metadata["rubygems_mfa_required"] = "true"
 
   # Specify which files should be added to the gem when it is released.
   # The `git ls-files -z` loads the files in the RubyGem that have been added into git.
   gemspec = File.basename(__FILE__)
   spec.files = IO.popen(%w[git ls-files -z], chdir: __dir__, err: IO::NULL) do |ls|
     ls.readlines("\x0", chomp: true).reject do |f|
+      # lib/smart_message/transport/base.rb is a test-only stub for the real
+      # smart_message gem; it must stay in the repo for tests but must not be
+      # packaged, or it could shadow the canonical smart_message base.
       (f == gemspec) ||
-        f.start_with?(*%w[bin/ Gemfile .gitignore test/ .rubocop.yml])
+        (f == "lib/smart_message/transport/base.rb") ||
+        f.start_with?(*%w[bin/ Gemfile .gitignore test/ .rubocop.yml .envrc .github/ Rakefile])
     end
   end
-  spec.bindir = "exe"
-  spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
   # Runtime dependencies
